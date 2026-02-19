@@ -3,9 +3,10 @@
 local car = {}
 
 function car.init(track)
-    car.x = track.cx
-    car.y = track.cy - (track.innerRy + track.outerRy) / 2
-    car.angle = 0
+    -- Use track start position if available, otherwise fall back to center
+    car.x = track.startX or track.cx
+    car.y = track.startY or (track.cy - (track.innerRy + track.outerRy) / 2)
+    car.angle = track.startAngle or 0
     car.speed = 0
     car.width = 28
     car.height = 14

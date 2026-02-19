@@ -45,6 +45,11 @@ end
 require("tests.test_track")
 require("tests.test_game")
 require("tests.test_car")
+require("tests.test_state")
+require("tests.test_menu")
+require("tests.test_pause")
+require("tests.test_tracks")
+require("tests.test_track_spline")
 
 -- Summary
 print(string.format("\n----\n%d passed, %d failed", passed, failed))

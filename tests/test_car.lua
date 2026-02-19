@@ -2,14 +2,13 @@ local car = require("car")
 local track = require("track")
 
 describe("car", function()
-    it("initializes at top of track", function()
+    it("initializes at track start position", function()
         track.init()
         car.init(track)
-        expect_eq(car.x, track.cx)
-        local expectedY = track.cy - (track.innerRy + track.outerRy) / 2
-        expect_near(car.y, expectedY, 0.001)
+        expect_eq(car.x, track.startX)
+        expect_eq(car.y, track.startY)
         expect_eq(car.speed, 0)
-        expect_eq(car.angle, 0)
+        expect_eq(car.angle, track.startAngle)
     end)
 
     it("accelerates when throttle is pressed", function()
