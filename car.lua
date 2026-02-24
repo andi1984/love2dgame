@@ -1,21 +1,30 @@
--- Car state and physics (pure logic, no Love2D dependency)
+-- Car factory and physics (pure logic, no Love2D dependency)
 
-local car = {}
+local Car = {}
+Car.__index = Car
 
-function car.init(track)
-    -- Use track start position if available, otherwise fall back to center
-    car.x = track.startX or track.cx
-    car.y = track.startY or (track.cy - (track.innerRy + track.outerRy) / 2)
-    car.angle = track.startAngle or 0
-    car.speed = 0
-    car.width = 28
-    car.height = 14
-    car.prevSpeed = 0
-    car.turning = false
-    car.currentZone = nil
-    car.shouldSpawnSmoke = false
+function Car.new(track, overrides)
+    local self = setmetatable({}, Car)
+    overrides = overrides or {}
 
-    car.physics = {
+    -- Start position (with optional offset along track)
+    self.x = track.startX or track.cx
+    self.y = track.startY or (track.cy - 50)
+    self.angle = track.startAngle or 0
+    self.speed = 0
+    self.width = 28
+    self.height = 14
+    self.prevSpeed = 0
+    self.turning = false
+    self.currentZone = nil
+    self.shouldSpawnSmoke = false
+
+    -- Identity
+    self.name = overrides.name or "Player"
+    self.color = overrides.color or {0.85, 0.1, 0.1}
+    self.isAI = overrides.isAI or false
+
+    self.physics = {
         mass = 800,
         fuelMass = 50,
         maxFuel = 50,
@@ -31,15 +40,34 @@ function car.init(track)
         gripMultiplier = 1.0,
         bumpMultiplier = 1.0,
     }
+
+    -- Apply physics overrides
+    if overrides.physics then
+        for k, v in pairs(overrides.physics) do
+            self.physics[k] = v
+        end
+    end
+
+    -- Apply start offset along track if provided
+    if overrides.startOffset and track.getPointAtPercent then
+        local offsetPct = (1.0 + overrides.startOffset) % 1.0
+        local pt = track.getPointAtPercent(offsetPct)
+        if pt then
+            self.x = pt.x
+            self.y = pt.y
+        end
+    end
+
+    return self
 end
 
-function car.update(dt, input, track)
-    local physics = car.physics
+function Car:update(dt, input, track)
+    local physics = self.physics
     local totalMass = physics.mass + physics.fuelMass
 
-    local zone = track.getSurfaceAt(car.x, car.y)
-    car.currentZone = zone
-    local onTrack = track.isOnTrack(car.x, car.y)
+    local zone = track.getSurfaceAt(self.x, self.y)
+    self.currentZone = zone
+    local onTrack = track.isOnTrack(self.x, self.y)
 
     -- Tire pressure grip
     local pressureDev = math.abs(physics.tirePressure - physics.optimalPressure)
@@ -53,7 +81,7 @@ function car.update(dt, input, track)
     -- Bumpiness
     local bumpiness = onTrack and (zone.bumpiness * physics.bumpMultiplier) or 0.0
 
-    car.prevSpeed = car.speed
+    self.prevSpeed = self.speed
 
     -- Throttle / brake
     local throttle = 0
@@ -69,7 +97,7 @@ function car.update(dt, input, track)
     end
 
     -- Drag
-    local dragForce = physics.dragCoeff * car.speed * math.abs(car.speed)
+    local dragForce = physics.dragCoeff * self.speed * math.abs(self.speed)
 
     -- Rolling resistance
     local rollingForce = physics.rollingResistance * totalMass * 9.81
@@ -77,15 +105,15 @@ function car.update(dt, input, track)
     -- Off-track grass drag
     local grassDrag = 0
     if not onTrack then
-        grassDrag = math.abs(car.speed) * 3.0
+        grassDrag = math.abs(self.speed) * 3.0
     end
 
     -- Net force
     local netForce = driveForce - dragForce - rollingForce - grassDrag
     if braking then
-        if car.speed > 0 then
+        if self.speed > 0 then
             netForce = netForce - brakeDecel
-        elseif car.speed < 0 then
+        elseif self.speed < 0 then
             netForce = netForce + brakeDecel
         else
             netForce = netForce - brakeDecel * 0.3
@@ -93,21 +121,21 @@ function car.update(dt, input, track)
     end
 
     local accel = netForce / totalMass
-    car.speed = car.speed + accel * dt
+    self.speed = self.speed + accel * dt
 
     -- Bumpiness perturbation
-    if bumpiness > 0.01 and math.abs(car.speed) > 20 then
-        local bumpMag = bumpiness * math.abs(car.speed) * 0.0003
-        car.speed = car.speed + (math.random() - 0.5) * bumpMag * car.speed
-        car.angle = car.angle + (math.random() - 0.5) * bumpiness * 0.005
+    if bumpiness > 0.01 and math.abs(self.speed) > 20 then
+        local bumpMag = bumpiness * math.abs(self.speed) * 0.0003
+        self.speed = self.speed + (math.random() - 0.5) * bumpMag * self.speed
+        self.angle = self.angle + (math.random() - 0.5) * bumpiness * 0.005
     end
 
     -- Clamp speed
-    car.speed = math.max(-100, math.min(physics.maxSpeed, car.speed))
+    self.speed = math.max(-100, math.min(physics.maxSpeed, self.speed))
 
     -- Stop drifting at low speeds
-    if math.abs(car.speed) < 1 and throttle == 0 and not braking then
-        car.speed = 0
+    if math.abs(self.speed) < 1 and throttle == 0 and not braking then
+        self.speed = 0
     end
 
     -- Fuel consumption
@@ -115,30 +143,39 @@ function car.update(dt, input, track)
         physics.fuelMass = math.max(0, physics.fuelMass - physics.fuelRate * dt)
     end
 
-    -- Turning
-    local turnFactor = math.min(1, math.abs(car.speed) / 100) * effectiveGrip
-    car.turning = false
-    if input.left then
-        car.angle = car.angle - physics.baseTurnSpeed * turnFactor * dt
-        car.turning = true
-    end
-    if input.right then
-        car.angle = car.angle + physics.baseTurnSpeed * turnFactor * dt
-        car.turning = true
+    -- Turning (supports both boolean left/right and continuous steer)
+    local turnFactor = math.min(1, math.abs(self.speed) / 100) * effectiveGrip
+    self.turning = false
+    if input.steer then
+        -- Continuous steering: steer in [-1, 1]
+        local steerVal = math.max(-1, math.min(1, input.steer))
+        if math.abs(steerVal) > 0.05 then
+            self.angle = self.angle + physics.baseTurnSpeed * steerVal * turnFactor * dt
+            self.turning = true
+        end
+    else
+        if input.left then
+            self.angle = self.angle - physics.baseTurnSpeed * turnFactor * dt
+            self.turning = true
+        end
+        if input.right then
+            self.angle = self.angle + physics.baseTurnSpeed * turnFactor * dt
+            self.turning = true
+        end
     end
 
     -- Move car
-    car.x = car.x + math.cos(car.angle) * car.speed * dt
-    car.y = car.y + math.sin(car.angle) * car.speed * dt
+    self.x = self.x + math.cos(self.angle) * self.speed * dt
+    self.y = self.y + math.sin(self.angle) * self.speed * dt
 
     -- Keep in bounds
-    car.x = math.max(10, math.min(790, car.x))
-    car.y = math.max(10, math.min(590, car.y))
+    self.x = math.max(10, math.min(790, self.x))
+    self.y = math.max(10, math.min(590, self.y))
 
     -- Determine if should spawn smoke
-    local isBraking = input.down and car.speed > 50
-    local isSharpTurn = car.turning and math.abs(car.speed) > 120
-    car.shouldSpawnSmoke = isBraking or isSharpTurn
+    local isBraking = input.down and self.speed > 50
+    local isSharpTurn = self.turning and math.abs(self.speed) > 120
+    self.shouldSpawnSmoke = isBraking or isSharpTurn
 end
 
-return car
+return Car

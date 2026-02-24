@@ -138,6 +138,12 @@ function track.initFromConfig(config)
     track.finishY1 = startPoint.y + ny * halfWidth
     track.finishY2 = startPoint.y - ny * halfWidth
     track.finishAngle = math.atan2(ty, tx)
+
+    -- Finish line as proper 2D geometry for direction-independent crossing detection
+    track.finishPoint = { x = startPoint.x, y = startPoint.y }
+    track.finishForward = { x = tx, y = ty }  -- track tangent = forward direction
+    track.finishP1 = { x = startPoint.x + nx * halfWidth, y = startPoint.y + ny * halfWidth }
+    track.finishP2 = { x = startPoint.x - nx * halfWidth, y = startPoint.y - ny * halfWidth }
     
     -- For compatibility: approximate center for trees
     local sumX, sumY = 0, 0
@@ -316,6 +322,11 @@ function track.generateSurfaceZones(zoneConfigs)
             color = {0.5, 0.5, 0.5, 0.0}
         })
     end
+end
+
+-- Get a point at a specific percentage along the track (0.0 to 1.0)
+function track.getPointAtPercent(pct)
+    return getPointAtPercent(track.centerPath, track.cumulative, track.pathLength, pct)
 end
 
 -- Get approximate track circumference (for stats)

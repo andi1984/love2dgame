@@ -522,8 +522,8 @@ function audio.update(dt, car, game, track, state)
         local pitch = 0.7 + speedRatio * 0.8  -- Range: 0.7 to 1.5
         audio.sounds.engine:setPitch(pitch)
         
-        -- Adjust engine volume based on throttle
-        local throttle = love.keyboard.isDown("up") and 1 or 0.5
+        -- Adjust engine volume based on acceleration
+        local throttle = (car.speed > (car.prevSpeed or 0)) and 1 or 0.5
         audio.sounds.engine:setVolume(audio.engineVolume * audio.masterVolume * (0.5 + throttle * 0.5))
         
         -- Handle off-track grass sound
@@ -544,7 +544,7 @@ function audio.update(dt, car, game, track, state)
         end
         
         -- Handle nasty rusty brake sound
-        local isBraking = love.keyboard.isDown("down") and car.speed > 30
+        local isBraking = car.speed > 30 and car.speed < (car.prevSpeed or car.speed) - 5
         if isBraking then
             if not audio.brakePlaying then
                 audio.sounds.brake:play()

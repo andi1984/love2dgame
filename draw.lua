@@ -18,6 +18,7 @@ function draw.init(track)
     fonts.title = love.graphics.newFont(42)
     fonts.menu = love.graphics.newFont(16)
     fonts.menuSmall = love.graphics.newFont(12)
+    fonts.position = love.graphics.newFont(11)
 
     draw.generateGrassCanvas()
     if track then
@@ -61,7 +62,7 @@ function draw.generateTrackCanvas(track)
         return
     end
     currentTrackId = trackId
-    
+
     trackCanvas = love.graphics.newCanvas(800, 600)
     love.graphics.setCanvas({trackCanvas, stencil=true})
     love.graphics.clear(0, 0, 0, 0)
@@ -80,17 +81,17 @@ function draw.generateTrackCanvas(track)
                 love.graphics.polygon("fill", outerVerts)
             end
         end, "replace", 1)
-        
+
         love.graphics.stencil(function()
             -- Cut out inner area (not applicable for spline tracks, skip)
         end, "replace", 0, true)
-        
+
         love.graphics.setStencilTest("greater", 0)
-        
+
         -- Draw track color
         love.graphics.setColor(0.25, 0.25, 0.28, 1)
         love.graphics.rectangle("fill", 0, 0, 800, 600)
-        
+
         -- Add texture
         math.randomseed(123)
         for _ = 1, 6000 do
@@ -107,10 +108,10 @@ function draw.generateTrackCanvas(track)
             love.graphics.setColor(v, v, v, 0.15)
             love.graphics.rectangle("fill", x, y, 2, 2)
         end
-        
+
         love.graphics.setStencilTest()
     end
-    
+
     love.graphics.setCanvas()
     math.randomseed(os.time())
 end
@@ -119,7 +120,7 @@ end
 -- MAIN DRAW (for racing state)
 -- ============================================================
 
-function draw.all(car, track, game, particles, devmenu)
+function draw.all(cars, track, game, particles, devmenu)
     draw.grass()
     draw.trackSurface(track)
     draw.surfaceZones(track)
@@ -127,17 +128,28 @@ function draw.all(car, track, game, particles, devmenu)
     draw.centerLine(track)
     draw.finishLine(track)
     draw.trees(track)
-    draw.carShadow(car)
+
+    -- Draw all car shadows
+    for _, c in ipairs(cars) do
+        draw.carShadow(c)
+    end
+
     draw.particles(particles)
-    draw.car(car)
-    draw.hud(car, game, track)
+
+    -- Draw all cars
+    for _, c in ipairs(cars) do
+        draw.car(c)
+    end
+
+    draw.hud(cars[1], game, track)
+    draw.positions(cars, game, track)
 
     if not game.started then
         draw.countdown(game)
     end
 
     if game.won then
-        draw.winScreen(game, track)
+        draw.winScreen(game, cars, track)
     end
 
     if devmenu.open then
@@ -164,14 +176,14 @@ function draw.trackSurface(track)
     if track.outerPath and track.innerPath then
         love.graphics.setColor(1, 1, 1, 0.15)
         love.graphics.setLineWidth(2)
-        
+
         -- Outer edge
         for i = 1, #track.outerPath do
             local p1 = track.outerPath[i]
             local p2 = track.outerPath[(i % #track.outerPath) + 1]
             love.graphics.line(p1.x, p1.y, p2.x, p2.y)
         end
-        
+
         -- Inner edge
         for i = 1, #track.innerPath do
             local p1 = track.innerPath[i]
@@ -218,13 +230,13 @@ end
 
 function draw.centerLine(track)
     if not track.centerPath then return end
-    
+
     love.graphics.setColor(1, 1, 1, 0.6)
     love.graphics.setLineWidth(2)
-    
+
     local dashLength = 3
     local dashCount = 0
-    
+
     for i = 1, #track.centerPath do
         dashCount = dashCount + 1
         if dashCount <= dashLength then
@@ -242,17 +254,16 @@ function draw.finishLine(track)
     local lineX = track.finishX
     local y1 = track.finishY2
     local y2 = track.finishY1
-    
+
     -- Handle both horizontal and vertical finish lines based on track angle
     local angle = track.finishAngle or 0
     local isVertical = math.abs(math.cos(angle)) > math.abs(math.sin(angle))
-    
+
     local gridSize = 6
     local cols = 2
     local totalWidth = cols * gridSize
 
     if isVertical then
-        -- Vertical finish line (original style)
         local numRows = math.floor(math.abs(y2 - y1) / gridSize)
         local minY = math.min(y1, y2)
         for row = 0, numRows - 1 do
@@ -269,14 +280,13 @@ function draw.finishLine(track)
             end
         end
     else
-        -- Angled finish line - draw perpendicular to track direction
         love.graphics.push()
         love.graphics.translate(lineX, (y1 + y2) / 2)
         love.graphics.rotate(angle + math.pi / 2)
-        
+
         local halfLen = math.abs(y2 - y1) / 2
         local numRows = math.floor(halfLen * 2 / gridSize)
-        
+
         for row = 0, numRows - 1 do
             for col = 0, cols - 1 do
                 if (row + col) % 2 == 0 then
@@ -333,7 +343,7 @@ end
 
 function draw.trees(track)
     if not track.trees then return end
-    
+
     for _, t in ipairs(track.trees) do
         love.graphics.setColor(0.4, 0.25, 0.1, 1)
         love.graphics.rectangle("fill", t.x - 2, t.y - t.trunkH, 4, t.trunkH)
@@ -364,6 +374,7 @@ function draw.car(car)
 
     local w = car.width
     local h = car.height
+    local color = car.color or {0.85, 0.1, 0.1}
 
     -- Wheels
     love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -373,13 +384,17 @@ function draw.car(car)
     love.graphics.rectangle("fill", -w * 0.3 - wheelW / 2, -h / 2 - wheelH / 2, wheelW, wheelH)
     love.graphics.rectangle("fill", -w * 0.3 - wheelW / 2, h / 2 - wheelH / 2, wheelW, wheelH)
 
-    -- Body
-    love.graphics.setColor(0.85, 0.1, 0.1, 1)
+    -- Body — use car's color
+    love.graphics.setColor(color[1], color[2], color[3], 1)
     local bodyInset = 1
     love.graphics.rectangle("fill", -w / 2 + bodyInset, -h / 2 + bodyInset, w - bodyInset * 2, h - bodyInset * 2, 3, 3)
 
-    -- Highlight stripe
-    love.graphics.setColor(1, 0.2, 0.15, 0.4)
+    -- Highlight stripe — lighter version of car color
+    love.graphics.setColor(
+        math.min(1, color[1] + 0.15),
+        math.min(1, color[2] + 0.1),
+        math.min(1, color[3] + 0.05),
+        0.4)
     love.graphics.rectangle("fill", -w / 2 + 3, -1, w - 6, 2, 1, 1)
 
     -- Windshield
@@ -422,6 +437,7 @@ function draw.hud(car, game, track)
 
     local x0 = panelX + 10
     local y0 = panelY + 8
+    local laps = game.carLaps[1] or 0
 
     -- Lap counter
     love.graphics.setColor(1, 1, 1, 0.9)
@@ -430,7 +446,7 @@ function draw.hud(car, game, track)
     local circleY = y0 + 8
     for i = 1, game.maxLaps do
         local cx = x0 + 35 + (i - 1) * 18
-        if i <= game.laps then
+        if i <= laps then
             love.graphics.setColor(0.2, 0.9, 0.2, 1)
             love.graphics.circle("fill", cx, circleY, 6)
         else
@@ -507,8 +523,65 @@ function draw.hud(car, game, track)
     -- Lap position
     love.graphics.setFont(fonts.hudBig)
     love.graphics.setColor(1, 1, 1, 0.7)
-    love.graphics.printf(string.format("%d/%d", math.min(game.laps + 1, game.maxLaps), game.maxLaps),
+    love.graphics.printf(string.format("%d/%d", math.min(laps + 1, game.maxLaps), game.maxLaps),
         panelX, panelY + panelH - 24, panelW - 10, "right")
+end
+
+-- Race positions panel (top-right)
+function draw.positions(cars, game, track)
+    -- Sort cars by lap count then track percentage
+    local sorted = {}
+    for i, c in ipairs(cars) do
+        table.insert(sorted, {
+            index = i,
+            name = c.name,
+            laps = game.carLaps[i] or 0,
+            pct = track.getTrackPercent(c.x, c.y),
+            color = c.color,
+        })
+    end
+    table.sort(sorted, function(a, b)
+        if a.laps ~= b.laps then return a.laps > b.laps end
+        return a.pct > b.pct
+    end)
+
+    local panelX = 800 - 140
+    local panelY = 8
+    local panelW = 130
+    local lineH = 20
+    local panelH = 10 + #sorted * lineH + 5
+
+    -- Panel background
+    love.graphics.setColor(0, 0, 0, 0.55)
+    love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 6, 6)
+    love.graphics.setColor(1, 1, 1, 0.15)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 6, 6)
+
+    love.graphics.setFont(fonts.position)
+    for pos, entry in ipairs(sorted) do
+        local y = panelY + 6 + (pos - 1) * lineH
+
+        -- Position number
+        love.graphics.setColor(1, 1, 1, 0.6)
+        love.graphics.print(pos .. ".", panelX + 6, y)
+
+        -- Color dot
+        love.graphics.setColor(entry.color[1], entry.color[2], entry.color[3], 1)
+        love.graphics.circle("fill", panelX + 26, y + 7, 4)
+
+        -- Name (truncated)
+        local displayName = entry.name
+        if #displayName > 12 then
+            displayName = displayName:sub(1, 11) .. "."
+        end
+        if entry.index == 1 then
+            love.graphics.setColor(1, 1, 1, 1)
+        else
+            love.graphics.setColor(1, 1, 1, 0.8)
+        end
+        love.graphics.print(displayName, panelX + 35, y)
+    end
 end
 
 function draw.countdown(game)
@@ -559,7 +632,7 @@ function draw.countdown(game)
     love.graphics.pop()
 end
 
-function draw.winScreen(game, track)
+function draw.winScreen(game, cars, track)
     love.graphics.setColor(0, 0, 0, 0.65)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
 
@@ -577,14 +650,28 @@ function draw.winScreen(game, track)
         end
     end
 
+    -- Determine winner text
+    local winnerIndex = game.winnerIndex or 1
+    local winnerCar = cars[winnerIndex]
+    local winText
+    if winnerIndex == 1 then
+        winText = "YOU WIN!"
+    else
+        winText = winnerCar.name .. " WINS!"
+    end
+
     love.graphics.setFont(fonts.win)
-    local winText = "YOU WIN!"
     local winTW = fonts.win:getWidth(winText)
 
     love.graphics.setColor(0, 0, 0, 0.6)
     love.graphics.print(winText, 400 - winTW / 2 + 3, 213)
 
-    love.graphics.setColor(1, 0.9, 0.1, 1)
+    -- Winner text color: use winner's car color or gold for player
+    if winnerIndex == 1 then
+        love.graphics.setColor(1, 0.9, 0.1, 1)
+    else
+        love.graphics.setColor(winnerCar.color[1], winnerCar.color[2], winnerCar.color[3], 1)
+    end
     love.graphics.print(winText, 400 - winTW / 2, 210)
 
     love.graphics.setFont(fonts.winSub)
@@ -612,17 +699,17 @@ end
 
 function draw.surfaceZones(track)
     if not track.surfaceZones or not track.centerPath then return end
-    
+
     -- For spline tracks, draw zones along the path segments
     local pathLen = #track.centerPath
-    
+
     for _, zone in ipairs(track.surfaceZones) do
         if zone.color and zone.color[4] > 0 then
             love.graphics.setColor(zone.color[1], zone.color[2], zone.color[3], zone.color[4])
-            
+
             local startIdx = math.floor(zone.startPct * pathLen) + 1
             local endIdx = math.floor(zone.endPct * pathLen)
-            
+
             for i = startIdx, endIdx do
                 if track.innerPath[i] and track.outerPath[i] then
                     local nextI = (i % pathLen) + 1
@@ -696,31 +783,31 @@ end
 function draw.mainMenu(menu)
     -- Background
     draw.grass()
-    
+
     -- Dark overlay
     love.graphics.setColor(0, 0, 0, 0.7)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
-    
+
     -- Title
     love.graphics.setFont(fonts.title)
     local title = "RACING GAME"
     local titleW = fonts.title:getWidth(title)
-    
+
     -- Title shadow
     love.graphics.setColor(0, 0, 0, 0.5)
     love.graphics.print(title, 400 - titleW / 2 + 3, 53)
-    
+
     -- Title text
     love.graphics.setColor(1, 0.9, 0.2, 1)
     love.graphics.print(title, 400 - titleW / 2, 50)
-    
+
     -- Subtitle
     love.graphics.setFont(fonts.menu)
     love.graphics.setColor(1, 1, 1, 0.7)
     local subtitle = "Select a track to begin"
     local subtitleW = fonts.menu:getWidth(subtitle)
     love.graphics.print(subtitle, 400 - subtitleW / 2, 110)
-    
+
     -- Track cards
     local trackList = menu.getTrackList()
     local startY = 160
@@ -728,18 +815,18 @@ function draw.mainMenu(menu)
     local cardH = 120
     local padding = 20
     local cols = 3
-    
+
     local totalW = cols * cardW + (cols - 1) * padding
     local startX = (800 - totalW) / 2
-    
+
     for i, trackInfo in ipairs(trackList) do
         local col = (i - 1) % cols
         local row = math.floor((i - 1) / cols)
         local cardX = startX + col * (cardW + padding)
         local cardY = startY + row * (cardH + padding)
-        
+
         local isSelected = (i == menu.selectedTrack) and (menu.selectedButton == "track")
-        
+
         -- Card background
         if isSelected then
             love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
@@ -747,7 +834,7 @@ function draw.mainMenu(menu)
             love.graphics.setColor(0.2, 0.2, 0.25, 0.85)
         end
         love.graphics.rectangle("fill", cardX, cardY, cardW, cardH, 8, 8)
-        
+
         -- Card border
         if isSelected then
             love.graphics.setColor(1, 1, 1, 0.9)
@@ -757,37 +844,37 @@ function draw.mainMenu(menu)
             love.graphics.setLineWidth(1)
         end
         love.graphics.rectangle("line", cardX, cardY, cardW, cardH, 8, 8)
-        
+
         -- Track name
         love.graphics.setFont(fonts.menu)
         love.graphics.setColor(1, 1, 1, 1)
         local nameW = fonts.menu:getWidth(trackInfo.name)
         love.graphics.print(trackInfo.name, cardX + (cardW - nameW) / 2, cardY + 10)
-        
+
         -- Track description
         love.graphics.setFont(fonts.menuSmall)
         love.graphics.setColor(1, 1, 1, 0.7)
         love.graphics.printf(trackInfo.description, cardX + 8, cardY + 35, cardW - 16, "center")
-        
-        -- Mini track preview (simplified representation of the track shape)
+
+        -- Mini track preview
         draw.miniTrackPreview(trackInfo, cardX + cardW / 2, cardY + 80, 50, 25)
     end
-    
+
     -- Controls button
     local btnW = 200
     local btnH = 40
     local btnX = (800 - btnW) / 2
     local btnY = 530
-    
+
     local isControlsSelected = (menu.selectedButton == "controls")
-    
+
     if isControlsSelected then
         love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
     else
         love.graphics.setColor(0.2, 0.2, 0.25, 0.85)
     end
     love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 6, 6)
-    
+
     if isControlsSelected then
         love.graphics.setColor(1, 1, 1, 0.9)
         love.graphics.setLineWidth(2)
@@ -796,13 +883,13 @@ function draw.mainMenu(menu)
         love.graphics.setLineWidth(1)
     end
     love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 6, 6)
-    
+
     love.graphics.setFont(fonts.menu)
     love.graphics.setColor(1, 1, 1, 1)
     local ctrlText = "CONTROLS"
     local ctrlW = fonts.menu:getWidth(ctrlText)
     love.graphics.print(ctrlText, btnX + (btnW - ctrlW) / 2, btnY + 10)
-    
+
     -- Instructions
     love.graphics.setFont(fonts.menuSmall)
     love.graphics.setColor(1, 1, 1, 0.5)
@@ -813,7 +900,7 @@ function draw.miniTrackPreview(trackInfo, cx, cy, scaleX, scaleY)
     -- Draw a small preview of the track shape
     local points = trackInfo.points
     if not points or #points < 3 then return end
-    
+
     -- Find bounds
     local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
     for _, p in ipairs(points) do
@@ -822,17 +909,17 @@ function draw.miniTrackPreview(trackInfo, cx, cy, scaleX, scaleY)
         minY = math.min(minY, p.y)
         maxY = math.max(maxY, p.y)
     end
-    
+
     local rangeX = maxX - minX
     local rangeY = maxY - minY
-    
+
     -- Scale to fit preview area
     local scale = math.min(scaleX * 2 / rangeX, scaleY * 2 / rangeY) * 0.8
-    
+
     -- Draw track outline
     love.graphics.setColor(0.5, 0.5, 0.55, 0.8)
     love.graphics.setLineWidth(4)
-    
+
     local verts = {}
     for _, p in ipairs(points) do
         local x = cx + (p.x - (minX + maxX) / 2) * scale
@@ -840,14 +927,14 @@ function draw.miniTrackPreview(trackInfo, cx, cy, scaleX, scaleY)
         table.insert(verts, x)
         table.insert(verts, y)
     end
-    
+
     -- Close the loop and draw
     if #verts >= 6 then
         table.insert(verts, verts[1])
         table.insert(verts, verts[2])
         love.graphics.line(verts)
     end
-    
+
     -- Draw start position marker
     if #verts >= 2 then
         love.graphics.setColor(0.2, 0.9, 0.2, 1)
@@ -863,36 +950,36 @@ function draw.pauseMenu(pause)
     -- Dark overlay
     love.graphics.setColor(0, 0, 0, 0.7)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
-    
+
     -- Menu panel
     local menuW = 220
     local menuH = 200
     local menuX = (800 - menuW) / 2
     local menuY = (600 - menuH) / 2
-    
+
     love.graphics.setColor(0.15, 0.15, 0.2, 0.95)
     love.graphics.rectangle("fill", menuX, menuY, menuW, menuH, 10, 10)
     love.graphics.setColor(1, 1, 1, 0.3)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", menuX, menuY, menuW, menuH, 10, 10)
-    
+
     -- Title
     love.graphics.setFont(fonts.hudBig)
     love.graphics.setColor(1, 1, 1, 1)
     local pauseTitle = "PAUSED"
     local titleW = fonts.hudBig:getWidth(pauseTitle)
     love.graphics.print(pauseTitle, menuX + (menuW - titleW) / 2, menuY + 15)
-    
+
     -- Options
     local options = pause.getOptions()
     local btnH = 35
     local btnPadding = 10
     local startY = menuY + 55
-    
+
     for i, option in ipairs(options) do
         local btnY = startY + (i - 1) * (btnH + btnPadding)
         local isSelected = (i == pause.getSelectedIndex())
-        
+
         -- Button background
         if isSelected then
             love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
@@ -900,7 +987,7 @@ function draw.pauseMenu(pause)
             love.graphics.setColor(0.25, 0.25, 0.3, 0.8)
         end
         love.graphics.rectangle("fill", menuX + 20, btnY, menuW - 40, btnH, 5, 5)
-        
+
         -- Button border
         if isSelected then
             love.graphics.setColor(1, 1, 1, 0.8)
@@ -910,7 +997,7 @@ function draw.pauseMenu(pause)
             love.graphics.setLineWidth(1)
         end
         love.graphics.rectangle("line", menuX + 20, btnY, menuW - 40, btnH, 5, 5)
-        
+
         -- Button text
         love.graphics.setFont(fonts.menu)
         love.graphics.setColor(1, 1, 1, 1)
@@ -926,30 +1013,30 @@ end
 function draw.controlsScreen()
     -- Background
     draw.grass()
-    
+
     -- Dark overlay
     love.graphics.setColor(0, 0, 0, 0.8)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
-    
+
     -- Panel
     local panelW = 400
     local panelH = 400
     local panelX = (800 - panelW) / 2
     local panelY = (600 - panelH) / 2
-    
+
     love.graphics.setColor(0.15, 0.15, 0.2, 0.95)
     love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 10, 10)
     love.graphics.setColor(1, 1, 1, 0.3)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", panelX, panelY, panelW, panelH, 10, 10)
-    
+
     -- Title
     love.graphics.setFont(fonts.title)
     love.graphics.setColor(1, 0.9, 0.2, 1)
     local title = "CONTROLS"
     local titleW = fonts.title:getWidth(title)
     love.graphics.print(title, 400 - titleW / 2, panelY + 20)
-    
+
     -- Controls list
     local controls = {
         {"UP", "Accelerate"},
@@ -959,41 +1046,41 @@ function draw.controlsScreen()
         {"ESC", "Pause Menu"},
         {"F1", "Dev Menu"},
     }
-    
+
     local startY = panelY + 90
     local lineH = 40
-    
+
     for i, ctrl in ipairs(controls) do
         local y = startY + (i - 1) * lineH
-        
+
         -- Key
         love.graphics.setFont(fonts.menu)
         love.graphics.setColor(0.3, 0.7, 1, 1)
         love.graphics.print(ctrl[1], panelX + 40, y)
-        
+
         -- Action
         love.graphics.setColor(1, 1, 1, 0.9)
         love.graphics.print(ctrl[2], panelX + 180, y)
     end
-    
+
     -- Back button
     local btnW = 150
     local btnH = 40
     local btnX = (800 - btnW) / 2
     local btnY = panelY + panelH - 60
-    
+
     love.graphics.setColor(0.3, 0.6, 0.9, 0.9)
     love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 6, 6)
     love.graphics.setColor(1, 1, 1, 0.8)
     love.graphics.setLineWidth(2)
     love.graphics.rectangle("line", btnX, btnY, btnW, btnH, 6, 6)
-    
+
     love.graphics.setFont(fonts.menu)
     love.graphics.setColor(1, 1, 1, 1)
     local backText = "BACK"
     local backW = fonts.menu:getWidth(backText)
     love.graphics.print(backText, btnX + (btnW - backW) / 2, btnY + 10)
-    
+
     -- Instructions
     love.graphics.setFont(fonts.menuSmall)
     love.graphics.setColor(1, 1, 1, 0.5)

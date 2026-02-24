@@ -50,6 +50,10 @@ require("tests.test_menu")
 require("tests.test_pause")
 require("tests.test_tracks")
 require("tests.test_track_spline")
+require("tests.test_nnet")
+require("tests.test_ai")
+require("tests.test_evolution")
+require("tests.test_persistence")
 
 -- Summary
 print(string.format("\n----\n%d passed, %d failed", passed, failed))
