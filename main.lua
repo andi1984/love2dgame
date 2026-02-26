@@ -16,6 +16,8 @@ local ai = require("ai")
 local evolution = require("evolution")
 local npcProfiles = require("npc_profiles")
 local persistence = require("persistence")
+local damage = require("damage")
+local collision = require("collision")
 
 local cars = {}
 local savedNpcData = nil
@@ -230,9 +232,58 @@ function love.update(dt)
             c:update(dt, input, track)
             game.checkFinishLine(track, prevX, prevY, c.x, c.y, i)
 
+            -- Environment damage (curbs, off-road)
+            if c.damage then
+                local hadFlat = c.damage.newFlat
+                damage.updateEnvironment(c.damage, c, track, dt)
+                -- Player blowout sound
+                if c.damage.newFlat and not hadFlat and i == 1 then
+                    audio.playTireBlowout()
+                end
+            end
+
             -- Particles for all cars
             if c.shouldSpawnSmoke then
                 particles.spawnSmoke(c)
+            end
+            -- Dark smoke from damaged engine (throttle it to ~4 per sec)
+            if c.shouldSpawnDarkSmoke and math.random() < dt * 4 then
+                particles.spawnDarkSmoke(c)
+            end
+        end
+
+        -- ----------------------------------------------------------------
+        -- Car-to-car collision detection and resolution
+        -- ----------------------------------------------------------------
+        local collisions = collision.checkAll(cars)
+        for _, ev in ipairs(collisions) do
+            local impactSpeed = collision.resolve(ev)
+
+            -- Apply structural damage to both cars
+            if ev.car1.damage and ev.car2.damage then
+                local prevFlat1 = ev.car1.damage.newFlat
+                local prevFlat2 = ev.car2.damage.newFlat
+                damage.applyCollision(ev.car1.damage, ev.car1,
+                                      ev.car2.damage, ev.car2, impactSpeed)
+
+                -- Blowout sound for player
+                if ev.idx1 == 1 and ev.car1.damage.newFlat and not prevFlat1 then
+                    audio.playTireBlowout()
+                elseif ev.idx2 == 1 and ev.car2.damage.newFlat and not prevFlat2 then
+                    audio.playTireBlowout()
+                end
+            end
+
+            -- Sparks at impact point
+            local side1 = ev.car1.damage and ev.car1.damage.impactSide or nil
+            local side2 = ev.car2.damage and ev.car2.damage.impactSide or nil
+            particles.spawnSparks(ev.car1, side1)
+            particles.spawnSparks(ev.car2, side2)
+
+            -- Crash audio (only for player-involved or high-speed collisions)
+            local force = ev.car1.damage and ev.car1.damage.impactForce or 0.3
+            if ev.idx1 == 1 or ev.idx2 == 1 then
+                audio.playCrash(force)
             end
         end
 

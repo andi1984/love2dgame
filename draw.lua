@@ -372,54 +372,102 @@ function draw.car(car)
     love.graphics.translate(car.x, car.y)
     love.graphics.rotate(car.angle)
 
-    local w = car.width
-    local h = car.height
+    local w     = car.width
+    local h     = car.height
     local color = car.color or {0.85, 0.1, 0.1}
+    local dmg   = car.damage
 
-    -- Wheels
-    love.graphics.setColor(0.1, 0.1, 0.1, 1)
+    -- Impact flash overlay (white flash when hit)
+    local flashAlpha = 0
+    if dmg and dmg.impactFlash > 0 then
+        flashAlpha = dmg.impactFlash * 0.7
+    end
+
+    -- Wheels — flat tires look squashed / darkened
     local wheelW, wheelH = 6, 3
-    love.graphics.rectangle("fill", w * 0.25 - wheelW / 2, -h / 2 - wheelH / 2, wheelW, wheelH)
-    love.graphics.rectangle("fill", w * 0.25 - wheelW / 2, h / 2 - wheelH / 2, wheelW, wheelH)
-    love.graphics.rectangle("fill", -w * 0.3 - wheelW / 2, -h / 2 - wheelH / 2, wheelW, wheelH)
-    love.graphics.rectangle("fill", -w * 0.3 - wheelW / 2, h / 2 - wheelH / 2, wheelW, wheelH)
+    local tireOrder = {
+        -- { xMult, ySign, tireKey }
+        { w * 0.25,  -h / 2, "FL" },
+        { w * 0.25,   h / 2, "FR" },
+        { -w * 0.3, -h / 2, "RL" },
+        { -w * 0.3,  h / 2, "RR" },
+    }
+    for _, tw in ipairs(tireOrder) do
+        local tx, ty, key = tw[1], tw[2], tw[3]
+        local health = dmg and dmg.tires[key] or 1.0
+        local isFlat = dmg and dmg.flatTires[key]
+        if isFlat then
+            -- Flat tire: wider, flatter, brighter rim visible
+            love.graphics.setColor(0.35, 0.30, 0.20, 1)  -- dusty brownish rim
+            love.graphics.rectangle("fill", tx - wheelW / 2 - 1, ty - wheelH / 2,
+                                    wheelW + 2, math.max(1, wheelH - 1))
+        else
+            -- Healthy tires range from black (perfect) to worn grey
+            local shade = 0.1 + (1 - health) * 0.25
+            love.graphics.setColor(shade, shade, shade, 1)
+            love.graphics.rectangle("fill", tx - wheelW / 2, ty - wheelH / 2,
+                                    wheelW, wheelH)
+        end
+    end
 
-    -- Body — use car's color
-    love.graphics.setColor(color[1], color[2], color[3], 1)
+    -- Body — darken with overall body damage
+    local avgBodyHealth = 1.0
+    if dmg then
+        avgBodyHealth = (dmg.body.front + dmg.body.rear +
+                         dmg.body.left  + dmg.body.right) / 4
+    end
+    local bodyR = color[1] * (0.55 + avgBodyHealth * 0.45)
+    local bodyG = color[2] * (0.55 + avgBodyHealth * 0.45)
+    local bodyB = color[3] * (0.55 + avgBodyHealth * 0.45)
+    love.graphics.setColor(bodyR, bodyG, bodyB, 1)
     local bodyInset = 1
-    love.graphics.rectangle("fill", -w / 2 + bodyInset, -h / 2 + bodyInset, w - bodyInset * 2, h - bodyInset * 2, 3, 3)
+    love.graphics.rectangle("fill", -w/2 + bodyInset, -h/2 + bodyInset,
+                             w - bodyInset*2, h - bodyInset*2, 3, 3)
 
-    -- Highlight stripe — lighter version of car color
+    -- Highlight stripe
     love.graphics.setColor(
-        math.min(1, color[1] + 0.15),
-        math.min(1, color[2] + 0.1),
-        math.min(1, color[3] + 0.05),
+        math.min(1, bodyR + 0.15),
+        math.min(1, bodyG + 0.10),
+        math.min(1, bodyB + 0.05),
         0.4)
-    love.graphics.rectangle("fill", -w / 2 + 3, -1, w - 6, 2, 1, 1)
+    love.graphics.rectangle("fill", -w/2 + 3, -1, w - 6, 2, 1, 1)
 
     -- Windshield
     love.graphics.setColor(0.15, 0.2, 0.35, 0.8)
-    love.graphics.rectangle("fill", -w * 0.2, -h / 2 + 2, w * 0.3, h - 4, 2, 2)
+    love.graphics.rectangle("fill", -w * 0.2, -h/2 + 2, w * 0.3, h - 4, 2, 2)
 
     -- Headlights
     love.graphics.setColor(1, 0.95, 0.3, 1)
-    love.graphics.rectangle("fill", w / 2 - 3, -h / 2 + 2, 3, 3)
-    love.graphics.rectangle("fill", w / 2 - 3, h / 2 - 5, 3, 3)
+    love.graphics.rectangle("fill", w/2 - 3, -h/2 + 2, 3, 3)
+    love.graphics.rectangle("fill", w/2 - 3,  h/2 - 5, 3, 3)
 
     -- Taillights
     love.graphics.setColor(1, 0, 0, 0.9)
-    love.graphics.rectangle("fill", -w / 2, -h / 2 + 2, 3, 3)
-    love.graphics.rectangle("fill", -w / 2, h / 2 - 5, 3, 3)
+    love.graphics.rectangle("fill", -w/2, -h/2 + 2, 3, 3)
+    love.graphics.rectangle("fill", -w/2,  h/2 - 5, 3, 3)
+
+    -- Impact flash (white overlay)
+    if flashAlpha > 0 then
+        love.graphics.setColor(1, 1, 1, flashAlpha)
+        love.graphics.rectangle("fill", -w/2 + bodyInset, -h/2 + bodyInset,
+                                 w - bodyInset*2, h - bodyInset*2, 3, 3)
+    end
 
     love.graphics.pop()
 end
 
 function draw.particles(particles)
     for _, p in ipairs(particles.list) do
-        local t = p.life / p.maxLife
+        local t     = p.life / p.maxLife
         local alpha = t * 0.6
-        local size = p.size * t
-        love.graphics.setColor(0.8, 0.8, 0.8, alpha)
+        local size  = p.size * t
+        if p.color then
+            -- Sparks fade quickly; dark smoke stays opaque longer
+            local a = p.color[4] and (p.color[4] * alpha) or alpha
+            love.graphics.setColor(p.color[1], p.color[2], p.color[3], a)
+        else
+            love.graphics.setColor(0.8, 0.8, 0.8, alpha)
+        end
         love.graphics.circle("fill", p.x, p.y, size)
     end
 end
@@ -428,7 +476,7 @@ function draw.hud(car, game, track)
     love.graphics.setFont(fonts.hud)
 
     local panelX, panelY = 8, 8
-    local panelW, panelH = 180, 160
+    local panelW, panelH = 180, 215   -- extended for damage section
     love.graphics.setColor(0, 0, 0, 0.55)
     love.graphics.rectangle("fill", panelX, panelY, panelW, panelH, 6, 6)
     love.graphics.setColor(1, 1, 1, 0.15)
@@ -519,6 +567,78 @@ function draw.hud(car, game, track)
     local zoneName = car.currentZone and car.currentZone.name or "Off Track"
     if not track.isOnTrack(car.x, car.y) then zoneName = "Off Track" end
     love.graphics.print(zoneName, x0, surfY)
+
+    -- ----------------------------------------------------------------
+    -- Damage panel
+    -- ----------------------------------------------------------------
+    local dmg = car.damage
+    if dmg then
+        local dmgY = surfY + 20
+
+        -- Section label
+        love.graphics.setFont(fonts.hud)
+        love.graphics.setColor(1, 0.75, 0.2, 0.9)
+        love.graphics.print("DAMAGE", x0, dmgY)
+
+        -- Helper: color by health
+        local function healthColor(h)
+            if h > 0.60 then return 0.2, 0.9, 0.2
+            elseif h > 0.25 then return 0.95, 0.75, 0.1
+            else return 0.95, 0.2, 0.1 end
+        end
+
+        -- Tire grid: FL FR / RL RR
+        local tireY = dmgY + 14
+        local tireX = x0 + 35
+        local spacing = 18
+        local tireLayout = {
+            { key="FL", label="FL", col=0, row=0 },
+            { key="FR", label="FR", col=1, row=0 },
+            { key="RL", label="RL", col=0, row=1 },
+            { key="RR", label="RR", col=1, row=1 },
+        }
+        love.graphics.setColor(1, 1, 1, 0.55)
+        love.graphics.print("TIRES", x0, tireY - 1)
+        for _, t in ipairs(tireLayout) do
+            local cx = tireX + t.col * spacing * 2
+            local cy = tireY + t.row * spacing
+            local h  = dmg.tires[t.key]
+            local r, g, b = healthColor(h)
+            -- Circle for tire
+            love.graphics.setColor(r, g, b, 0.9)
+            love.graphics.circle("fill", cx, cy + 6, 5)
+            -- Flat indicator
+            if dmg.flatTires[t.key] then
+                love.graphics.setColor(1, 1, 1, 0.9)
+                love.graphics.setLineWidth(1)
+                love.graphics.circle("line", cx, cy + 6, 7)
+            end
+            -- Label
+            love.graphics.setColor(1, 1, 1, 0.55)
+            love.graphics.print(t.label, cx - 6, cy + 14)
+        end
+
+        -- Engine health bar
+        local engY = tireY + spacing * 2 + 8
+        love.graphics.setColor(1, 1, 1, 0.55)
+        love.graphics.print("ENG", x0, engY)
+        local er, eg, eb = healthColor(dmg.engine)
+        love.graphics.setColor(1, 1, 1, 0.15)
+        love.graphics.rectangle("fill", x0 + 35, engY + 3, 100, 8, 2, 2)
+        love.graphics.setColor(er, eg, eb, 0.85)
+        love.graphics.rectangle("fill", x0 + 35, engY + 3, 100 * dmg.engine, 8, 2, 2)
+
+        -- Body damage summary bar
+        local avgBody = (dmg.body.front + dmg.body.rear + dmg.body.left + dmg.body.right) / 4
+        local bdY = engY + 18
+        love.graphics.setColor(1, 1, 1, 0.55)
+        love.graphics.print("BODY", x0, bdY)
+        local br, bg, bb = healthColor(avgBody)
+        love.graphics.setColor(1, 1, 1, 0.15)
+        love.graphics.rectangle("fill", x0 + 35, bdY + 3, 100, 8, 2, 2)
+        love.graphics.setColor(br, bg, bb, 0.85)
+        love.graphics.rectangle("fill", x0 + 35, bdY + 3, 100 * avgBody, 8, 2, 2)
+    end
 
     -- Lap position
     love.graphics.setFont(fonts.hudBig)
