@@ -95,7 +95,7 @@ end
 function persistence.load()
     if love and love.filesystem then
         if love.filesystem.getInfo("npc_brains.lua") then
-            local chunk, err = love.filesystem.load("npc_brains.lua")
+            local chunk = love.filesystem.load("npc_brains.lua")
             if chunk then
                 local ok, data = pcall(chunk)
                 if ok then return data end
