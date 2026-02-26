@@ -1,0 +1,391 @@
+name: CI/CD Pipeline
+
+# ── Triggers ─────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main, master]
+
+# Cancel any in-flight run for the same ref when a new commit arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# ── Shared env ────────────────────────────────────────────────────────────────
+env:
+  LOVE_VERSION: "11.5"
+  GAME_NAME: "racing-game"
+
+# ═════════════════════════════════════════════════════════════════════════════
+jobs:
+
+  # ── 1. Static analysis ─────────────────────────────────────────────────────
+  lint:
+    name: "Lint (luacheck)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install luacheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y luarocks
+          sudo luarocks install luacheck
+
+      - name: Run luacheck
+        run: |
+          set +e
+          luacheck . --config .luacheckrc 2>&1 | tee lint_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          echo "## Lint Results" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat lint_output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$EXIT_CODE"
+
+  # ── 2. Unit tests ──────────────────────────────────────────────────────────
+  test:
+    name: "Tests (lua5.4)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.4
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4
+
+      - name: Run test suite
+        run: |
+          lua5.4 tests/run.lua > test_output.txt 2>&1
+          EXIT_CODE=$?
+          cat test_output.txt
+
+          echo "## Test Results" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo ":white_check_mark: All tests passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo ":x: Test failures detected" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat test_output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$EXIT_CODE"
+
+  # ── 3. Package .love archive ───────────────────────────────────────────────
+  #
+  #  A .love file is a ZIP archive of the game sources.  All platform
+  #  builds derive from this single artifact so we build it only once.
+  # ──────────────────────────────────────────────────────────────────────────
+  package:
+    name: "Package .love"
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Create .love archive
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCHIVE="$GAME_NAME-$VERSION.love"
+
+          zip -9 -r "$ARCHIVE" . \
+            --exclude ".git/*"        \
+            --exclude ".github/*"     \
+            --exclude "tests/*"       \
+            --exclude ".luacheckrc"   \
+            --exclude ".gitignore"    \
+            --exclude "*.md"          \
+            --exclude "*.love"        \
+            --exclude "npc_brains.lua"
+
+          echo "### .love package" >> "$GITHUB_STEP_SUMMARY"
+          echo "**File:** \`$ARCHIVE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Size:** $(du -h "$ARCHIVE" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Archive contents</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          unzip -l "$ARCHIVE" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify archive integrity
+        run: |
+          ARCHIVE="$GAME_NAME-${{ steps.version.outputs.version }}.love"
+          unzip -t "$ARCHIVE"
+          echo "Archive integrity: OK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: love-package
+          path: "*.love"
+          retention-days: 30
+
+  # ── 4. Linux binary ────────────────────────────────────────────────────────
+  #
+  #  Fuse Love2D AppImage + .love → self-contained x86_64 executable.
+  #  The AppImage runtime searches the tail of its own binary for a .love
+  #  archive, so simple concatenation is all that is needed.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: "Build – Linux (x86_64)"
+    runs-on: ubuntu-latest
+    needs: package
+
+    steps:
+      - name: Download .love artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: love-package
+
+      - name: Cache Love2D AppImage
+        uses: actions/cache@v4
+        with:
+          path: love.AppImage
+          key: love2d-${{ env.LOVE_VERSION }}-linux-appimage
+
+      - name: Download Love2D AppImage
+        run: |
+          if [ ! -f love.AppImage ]; then
+            echo "Cache miss – downloading Love2D $LOVE_VERSION AppImage…"
+            wget -q \
+              "https://github.com/love2d/love/releases/download/$LOVE_VERSION/love-$LOVE_VERSION-x86_64.AppImage" \
+              -O love.AppImage
+          else
+            echo "Cache hit – reusing Love2D AppImage"
+          fi
+          chmod +x love.AppImage
+
+      - name: Fuse binary
+        run: |
+          LOVE_FILE=$(ls *.love | head -1)
+          OUTPUT="$GAME_NAME-linux-x86_64"
+          cat love.AppImage "$LOVE_FILE" > "$OUTPUT"
+          chmod +x "$OUTPUT"
+
+          echo "### Linux binary" >> "$GITHUB_STEP_SUMMARY"
+          echo "**File:** \`$OUTPUT\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Size:** $(du -h "$OUTPUT" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: "${{ env.GAME_NAME }}-linux-x86_64"
+          retention-days: 30
+
+  # ── 5. Windows bundle ──────────────────────────────────────────────────────
+  #
+  #  Fuse love.exe + .love, then zip it alongside the required DLLs for a
+  #  zero-install drop-in package for Windows players.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: "Build – Windows (x86_64)"
+    runs-on: ubuntu-latest
+    needs: package
+
+    steps:
+      - name: Download .love artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: love-package
+
+      - name: Cache Love2D Windows
+        uses: actions/cache@v4
+        with:
+          path: love-win64.zip
+          key: love2d-${{ env.LOVE_VERSION }}-win64
+
+      - name: Download Love2D Windows
+        run: |
+          if [ ! -f love-win64.zip ]; then
+            echo "Cache miss – downloading Love2D $LOVE_VERSION Win64…"
+            wget -q \
+              "https://github.com/love2d/love/releases/download/$LOVE_VERSION/love-$LOVE_VERSION-win64.zip" \
+              -O love-win64.zip
+          else
+            echo "Cache hit – reusing Love2D Win64"
+          fi
+          unzip -q love-win64.zip
+
+      - name: Create Windows bundle
+        run: |
+          LOVE_FILE=$(ls *.love | head -1)
+          LOVE_DIR="love-$LOVE_VERSION-win64"
+          BUNDLE_DIR="$GAME_NAME-win64"
+
+          cat "$LOVE_DIR/love.exe" "$LOVE_FILE" > "$GAME_NAME-win64.exe"
+
+          mkdir -p "$BUNDLE_DIR"
+          cp "$GAME_NAME-win64.exe" "$BUNDLE_DIR/"
+          cp "$LOVE_DIR/"*.dll "$BUNDLE_DIR/" 2>/dev/null || true
+          [ -f "$LOVE_DIR/license.txt" ] && cp "$LOVE_DIR/license.txt" "$BUNDLE_DIR/"
+
+          zip -r "$BUNDLE_DIR.zip" "$BUNDLE_DIR/"
+
+          echo "### Windows bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo "**File:** \`$BUNDLE_DIR.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Size:** $(du -h "$BUNDLE_DIR.zip" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "<details><summary>Bundle contents</summary>" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          unzip -l "$BUNDLE_DIR.zip" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: "${{ env.GAME_NAME }}-win64.zip"
+          retention-days: 30
+
+  # ── 6. macOS bundle ────────────────────────────────────────────────────────
+  #
+  #  Inject the .love file into love.app/Contents/Resources/ and patch
+  #  Info.plist to show the game name instead of "LÖVE".  We use a
+  #  Python one-liner (plistlib) so no macOS runner is needed — saving
+  #  premium CI minutes while still producing a valid .app bundle.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-macos:
+    name: "Build – macOS (Universal)"
+    runs-on: ubuntu-latest
+    needs: package
+
+    steps:
+      - name: Download .love artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: love-package
+
+      - name: Cache Love2D macOS
+        uses: actions/cache@v4
+        with:
+          path: love-macos.zip
+          key: love2d-${{ env.LOVE_VERSION }}-macos
+
+      - name: Download Love2D macOS
+        run: |
+          if [ ! -f love-macos.zip ]; then
+            echo "Cache miss – downloading Love2D $LOVE_VERSION macOS…"
+            curl -sL \
+              "https://github.com/love2d/love/releases/download/$LOVE_VERSION/love-$LOVE_VERSION-macos.zip" \
+              -o love-macos.zip
+          else
+            echo "Cache hit – reusing Love2D macOS"
+          fi
+          unzip -q love-macos.zip
+
+      - name: Bundle macOS app
+        run: |
+          LOVE_FILE=$(ls *.love | head -1)
+          cp "$LOVE_FILE" "love.app/Contents/Resources/"
+
+          # Patch Info.plist via Python plistlib (no PlistBuddy / macOS runner needed)
+          python3 -c "import plistlib; p='love.app/Contents/Info.plist'; d=plistlib.load(open(p,'rb')); d.update({'CFBundleName':'Racing Game','CFBundleDisplayName':'Racing Game','CFBundleIdentifier':'com.game.racinggame'}); plistlib.dump(d,open(p,'wb')); print('Info.plist patched')"
+          mv love.app "$GAME_NAME.app"
+          zip -r "$GAME_NAME-macos.zip" "$GAME_NAME.app"
+
+          echo "### macOS bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo "**File:** \`$GAME_NAME-macos.zip\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Size:** $(du -h "$GAME_NAME-macos.zip" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-binary
+          path: "${{ env.GAME_NAME }}-macos.zip"
+          retention-days: 30
+
+  # ── 7. Pipeline summary ────────────────────────────────────────────────────
+  summary:
+    name: "Pipeline Summary"
+    runs-on: ubuntu-latest
+    needs: [lint, test, package, build-linux, build-windows, build-macos]
+    if: always()
+
+    steps:
+      - name: Write job summary
+        env:
+          R_LINT:    ${{ needs.lint.result }}
+          R_TEST:    ${{ needs.test.result }}
+          R_PKG:     ${{ needs.package.result }}
+          R_LINUX:   ${{ needs.build-linux.result }}
+          R_WINDOWS: ${{ needs.build-windows.result }}
+          R_MACOS:   ${{ needs.build-macos.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   printf ':white_check_mark:' ;;
+              failure)   printf ':x:' ;;
+              cancelled) printf ':white_circle:' ;;
+              skipped)   printf ':next_track_button:' ;;
+              *)         printf ':question:' ;;
+            esac
+          }
+
+          {
+            echo "## CI/CD Pipeline Summary"
+            echo ""
+            echo "| Stage          | Status |"
+            echo "|----------------|--------|"
+            echo "| Lint           | $(icon "$R_LINT")    \`$R_LINT\` |"
+            echo "| Tests          | $(icon "$R_TEST")    \`$R_TEST\` |"
+            echo "| Package .love  | $(icon "$R_PKG")     \`$R_PKG\` |"
+            echo "| Linux build    | $(icon "$R_LINUX")   \`$R_LINUX\` |"
+            echo "| Windows build  | $(icon "$R_WINDOWS") \`$R_WINDOWS\` |"
+            echo "| macOS build    | $(icon "$R_MACOS")   \`$R_MACOS\` |"
+            echo ""
+            echo "> Artifacts are retained for **30 days** (Actions tab)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 8. GitHub Release (tag pushes only) ────────────────────────────────────
+  #
+  #  Push a v*.*.* tag to trigger a full release.  All platform binaries
+  #  and the .love file are attached automatically.
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: "GitHub Release"
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            love-package/*.love
+            linux-binary/*
+            windows-binary/*.zip
+            macos-binary/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

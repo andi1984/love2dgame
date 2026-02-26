@@ -120,8 +120,8 @@ local function generateRustyBrakeLoop(sampleRate)
     
     for i = 0, samples - 1 do
         local t = i / sampleRate
-        local value = 0
-        
+        local value
+
         -- Primary squeal tone - high pitched sine wave
         -- with slight pitch wobble to simulate uneven rotor contact
         local pitchWobble = 1 + 0.02 * math.sin(2 * math.pi * 8 * t)  -- Slow wobble

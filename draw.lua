@@ -1,7 +1,5 @@
 -- All rendering code (requires Love2D)
 
-local helpers = require("helpers")
-
 local draw = {}
 local fonts = {}
 local grassCanvas
@@ -714,12 +712,11 @@ function draw.surfaceZones(track)
                 if track.innerPath[i] and track.outerPath[i] then
                     local nextI = (i % pathLen) + 1
                     if track.innerPath[nextI] and track.outerPath[nextI] then
-                        local ok, _ = pcall(love.graphics.polygon, "fill",
+                        pcall(love.graphics.polygon, "fill",
                             track.outerPath[i].x, track.outerPath[i].y,
                             track.outerPath[nextI].x, track.outerPath[nextI].y,
                             track.innerPath[nextI].x, track.innerPath[nextI].y,
                             track.innerPath[i].x, track.innerPath[i].y)
-                        if not ok then end
                     end
                 end
             end
