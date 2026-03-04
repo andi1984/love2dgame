@@ -1,8 +1,8 @@
 local tracks = require("tracks")
 
 describe("tracks", function()
-    it("has multiple tracks available", function()
-        expect_true(tracks.count() >= 4)
+    it("has at least 3 default tracks", function()
+        expect_true(tracks.count() >= 3)
     end)
 
     it("getByIndex returns correct track", function()
@@ -13,10 +13,9 @@ describe("tracks", function()
         expect_true(first.width ~= nil)
     end)
 
-    it("getById returns correct track", function()
-        local oval = tracks.getById("oval")
-        expect_true(oval ~= nil)
-        expect_eq(oval.name, "Classic Oval")
+    it("getByIndex returns nil for out-of-range", function()
+        local bad = tracks.getByIndex(9999)
+        expect_eq(bad, nil)
     end)
 
     it("getById returns nil for unknown id", function()
@@ -61,5 +60,25 @@ describe("tracks", function()
             expect_near(zones[1].startPct, 0, 0.001, "Track " .. i .. " first zone should start at 0")
             expect_near(zones[#zones].endPct, 1, 0.001, "Track " .. i .. " last zone should end at 1")
         end
+    end)
+
+    it("default tracks are generated (have seed field)", function()
+        for i = 1, 3 do
+            local t = tracks.getByIndex(i)
+            expect_true(t.seed ~= nil, "Default track " .. i .. " should have seed")
+            expect_true(t.generated == true, "Default track " .. i .. " should be generated")
+        end
+    end)
+
+    it("add() increases track count", function()
+        local before = tracks.count()
+        tracks.add({
+            id = "test_track", name = "Test", description = "Test",
+            width = 60, points = {{x=100,y=100},{x=200,y=100},{x=200,y=200},{x=100,y=200}},
+            startAngle = 0, surfaceZones = {{startPct=0,endPct=1,grip=0.9,bumpiness=0.1,name="Test",color={0.5,0.5,0.5,0}}},
+        })
+        expect_eq(tracks.count(), before + 1)
+        -- Clean up: remove the test track
+        table.remove(tracks.list)
     end)
 end)

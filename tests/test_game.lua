@@ -121,10 +121,10 @@ describe("game", function()
         expect_false(game.evolutionDone)
     end)
 
-    it("finish line works on Figure Eight track (non-horizontal start)", function()
-        local fig8 = tracks.getById("figure8")
-        expect_true(fig8 ~= nil, "figure8 track not found")
-        track.initFromConfig(fig8)
+    it("finish line works on non-first track (non-horizontal start)", function()
+        local cfg = tracks.getByIndex(2)
+        expect_true(cfg ~= nil, "second track not found")
+        track.initFromConfig(cfg)
         game.init(1)
 
         -- The car should be able to complete a lap by crossing the finish line
@@ -143,9 +143,9 @@ describe("game", function()
         expect_eq(game.carLaps[1], 1, "lap should count when crossing in forward direction")
     end)
 
-    it("finish line rejects backward crossing on Figure Eight", function()
-        local fig8 = tracks.getById("figure8")
-        track.initFromConfig(fig8)
+    it("finish line rejects backward crossing on non-first track", function()
+        local cfg = tracks.getByIndex(2)
+        track.initFromConfig(cfg)
         game.init(1)
 
         local fwd = track.finishForward

@@ -14,10 +14,10 @@ describe("menu", function()
         expect_eq(menu.selectedTrack, 2)
     end)
 
-    it("selectNext wraps around to first track", function()
+    it("selectNext wraps around past add card", function()
         menu.init()
-        local count = tracks.count()
-        for _ = 1, count do
+        local displayCount = menu.getDisplayCount()
+        for _ = 1, displayCount do
             menu.selectNext()
         end
         expect_eq(menu.selectedTrack, 1)
@@ -30,10 +30,33 @@ describe("menu", function()
         expect_eq(menu.selectedTrack, 2)
     end)
 
-    it("selectPrev wraps around to last track", function()
+    it("selectPrev wraps around to add card", function()
         menu.init()
         menu.selectPrev()
-        expect_eq(menu.selectedTrack, tracks.count())
+        expect_eq(menu.selectedTrack, menu.getDisplayCount())
+    end)
+
+    it("getDisplayCount includes add card", function()
+        menu.init()
+        expect_eq(menu.getDisplayCount(), tracks.count() + 1)
+    end)
+
+    it("isAddSelected returns true for last slot", function()
+        menu.init()
+        menu.selectedTrack = tracks.count() + 1
+        expect_true(menu.isAddSelected())
+    end)
+
+    it("isAddSelected returns false for track slots", function()
+        menu.init()
+        menu.selectedTrack = 1
+        expect_false(menu.isAddSelected())
+    end)
+
+    it("getSelectedTrack returns nil when add is selected", function()
+        menu.init()
+        menu.selectedTrack = tracks.count() + 1
+        expect_eq(menu.getSelectedTrack(), nil)
     end)
 
     it("moveDown changes button to controls", function()

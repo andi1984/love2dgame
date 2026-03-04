@@ -17,6 +17,8 @@ local npcProfiles = require("npc_profiles")
 local persistence = require("persistence")
 local damage = require("damage")
 local collision = require("collision")
+local tracks = require("tracks")
+local trackgen = require("trackgen")
 
 local cars = {}
 local savedNpcData = nil
@@ -91,6 +93,22 @@ function love.load()
 
     -- Load saved NPC brain data
     savedNpcData = persistence.load()
+
+    -- Load saved custom tracks
+    local savedTracks = persistence.loadTracks()
+    for _, t in ipairs(savedTracks) do
+        tracks.add(t)
+    end
+end
+
+-- Generate a new track and add it to the list
+local function generateNewTrack()
+    local seed = os.time() + math.floor(math.random() * 10000)
+    local config = trackgen.generate(seed)
+    tracks.add(config)
+    persistence.saveTracks(tracks.list)
+    menu.init()
+    menu.selectedTrack = tracks.count() -- select the new track
 end
 
 -- Start a race with the selected track
@@ -343,9 +361,13 @@ function love.keypressed(key)
         elseif key == "return" or key == "space" then
             audio.playMenuSelect()
             if menu.selectedButton == "track" then
-                local selectedTrack = menu.getSelectedTrack()
-                if selectedTrack then
-                    startRace(selectedTrack)
+                if menu.isAddSelected() then
+                    generateNewTrack()
+                else
+                    local selectedTrack = menu.getSelectedTrack()
+                    if selectedTrack then
+                        startRace(selectedTrack)
+                    end
                 end
             elseif menu.selectedButton == "controls" then
                 state.set("controls")
@@ -431,6 +453,9 @@ function love.mousepressed(x, y, button)
             if selectedTrack then
                 startRace(selectedTrack)
             end
+        elseif action == "generate" then
+            audio.playMenuSelect()
+            generateNewTrack()
         elseif action == "controls" then
             audio.playMenuSelect()
             state.set("controls")

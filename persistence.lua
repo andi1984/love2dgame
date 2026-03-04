@@ -105,4 +105,39 @@ function persistence.load()
     return nil
 end
 
+-- Save generated tracks to file
+function persistence.saveTracks(trackList)
+    -- Only save user-generated tracks (index > 3)
+    local toSave = {}
+    for i = 4, #trackList do
+        local t = trackList[i]
+        if t.generated then
+            table.insert(toSave, t)
+        end
+    end
+    if #toSave == 0 then return true end
+
+    local str = "return " .. persistence.serialize(toSave) .. "\n"
+    if love and love.filesystem then
+        return love.filesystem.write("custom_tracks.lua", str)
+    end
+    return false, "no filesystem available"
+end
+
+-- Load saved tracks from file
+function persistence.loadTracks()
+    if love and love.filesystem then
+        if love.filesystem.getInfo("custom_tracks.lua") then
+            local chunk = love.filesystem.load("custom_tracks.lua")
+            if chunk then
+                local ok, data = pcall(chunk)
+                if ok and type(data) == "table" then
+                    return data
+                end
+            end
+        end
+    end
+    return {}
+end
+
 return persistence

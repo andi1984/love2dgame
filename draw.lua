@@ -977,6 +977,54 @@ function draw.mainMenu(menu)
         draw.miniTrackPreview(trackInfo, cardX + cardW / 2, cardY + 80, 50, 25)
     end
 
+    -- "+" Generate Track card
+    do
+        local addIdx = #trackList + 1
+        local col = (addIdx - 1) % cols
+        local row = math.floor((addIdx - 1) / cols)
+        local cardX = startX + col * (cardW + padding)
+        local cardY = startY + row * (cardH + padding)
+
+        local isSelected = (addIdx == menu.selectedTrack) and (menu.selectedButton == "track")
+
+        -- Card background (green tint)
+        if isSelected then
+            love.graphics.setColor(0.2, 0.65, 0.35, 0.9)
+        else
+            love.graphics.setColor(0.15, 0.3, 0.2, 0.85)
+        end
+        love.graphics.rectangle("fill", cardX, cardY, cardW, cardH, 8, 8)
+
+        -- Card border
+        if isSelected then
+            love.graphics.setColor(0.4, 1, 0.5, 0.9)
+            love.graphics.setLineWidth(3)
+        else
+            love.graphics.setColor(0.3, 0.8, 0.4, 0.4)
+            love.graphics.setLineWidth(1)
+        end
+        love.graphics.rectangle("line", cardX, cardY, cardW, cardH, 8, 8)
+
+        -- Large "+" symbol
+        love.graphics.setFont(fonts.title)
+        local plusText = "+"
+        local plusW = fonts.title:getWidth(plusText)
+        local plusH = fonts.title:getHeight()
+        if isSelected then
+            love.graphics.setColor(0.4, 1, 0.5, 1)
+        else
+            love.graphics.setColor(0.3, 0.8, 0.4, 0.8)
+        end
+        love.graphics.print(plusText, cardX + (cardW - plusW) / 2, cardY + (cardH - plusH) / 2 - 10)
+
+        -- "Generate Track" label
+        love.graphics.setFont(fonts.menuSmall)
+        love.graphics.setColor(1, 1, 1, 0.7)
+        local label = "Generate Track"
+        local labelW = fonts.menuSmall:getWidth(label)
+        love.graphics.print(label, cardX + (cardW - labelW) / 2, cardY + cardH - 25)
+    end
+
     -- Controls button
     local btnW = 200
     local btnH = 40
