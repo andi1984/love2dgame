@@ -2,6 +2,8 @@
 -- Generates retro-style sounds procedurally using Love2D's SoundData
 
 local audio = {}
+local floor, abs, min, max = math.floor, math.abs, math.min, math.max
+local sin, exp, random, pi = math.sin, math.exp, math.random, math.pi
 
 -- Sound sources
 audio.sounds = {}
@@ -41,7 +43,7 @@ audio.uiVolume      = 0.4
 local function generateSquareWave(frequency, duration, sampleRate, dutyCycle)
     sampleRate = sampleRate or 44100
     dutyCycle  = dutyCycle  or 0.5
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     local period = sampleRate / frequency
     for i = 0, samples - 1 do
@@ -63,17 +65,17 @@ end
 local function generateEngineLoop(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.5
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     local baseFreq  = 80
     for i = 0, samples - 1 do
         local t   = i / sampleRate
         local val = 0
-        val = val + math.sin(2 * math.pi * baseFreq     * t) * 0.15
-        val = val + math.sin(2 * math.pi * baseFreq * 2 * t) * 0.10
-        val = val + math.sin(2 * math.pi * baseFreq * 3 * t) * 0.05
-        val = val + (math.random() * 2 - 1) * 0.03
-        local mod = 0.8 + 0.2 * math.sin(2 * math.pi * 15 * t)
+        val = val + sin(2 * pi * baseFreq     * t) * 0.15
+        val = val + sin(2 * pi * baseFreq * 2 * t) * 0.10
+        val = val + sin(2 * pi * baseFreq * 3 * t) * 0.05
+        val = val + (random() * 2 - 1) * 0.03
+        local mod = 0.8 + 0.2 * sin(2 * pi * 15 * t)
         soundData:setSample(i, val * mod)
     end
     return soundData
@@ -82,10 +84,10 @@ end
 local function generateGrassLoop(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.3
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     for i = 0, samples - 1 do
-        local val = (math.random() * 2 - 1) * 0.15
+        local val = (random() * 2 - 1) * 0.15
         if i > 0 then
             val = soundData:getSample(i - 1) * 0.7 + val * 0.3
         end
@@ -97,22 +99,22 @@ end
 local function generateRustyBrakeLoop(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.3
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     local baseFreq  = 2800
     for i = 0, samples - 1 do
         local t           = i / sampleRate
-        local pitchWobble = 1 + 0.02 * math.sin(2 * math.pi * 8 * t)
-        local squeal1 = math.sin(2 * math.pi * baseFreq          * pitchWobble * t)
-        local squeal2 = math.sin(2 * math.pi * baseFreq * 1.502  * pitchWobble * t)
-        local squeal3 = math.sin(2 * math.pi * baseFreq * 2.03   * pitchWobble * t)
+        local pitchWobble = 1 + 0.02 * sin(2 * pi * 8 * t)
+        local squeal1 = sin(2 * pi * baseFreq          * pitchWobble * t)
+        local squeal2 = sin(2 * pi * baseFreq * 1.502  * pitchWobble * t)
+        local squeal3 = sin(2 * pi * baseFreq * 2.03   * pitchWobble * t)
         local val     = squeal1 * 0.25 + squeal2 * 0.15 + squeal3 * 0.1
-        local pulse   = 0.5 + 0.5 * math.sin(2 * math.pi * 15 * t)
+        local pulse   = 0.5 + 0.5 * sin(2 * pi * 15 * t)
         pulse  = pulse * pulse
         val    = val * (0.3 + 0.7 * pulse)
-        if math.sin(2 * math.pi * 47 * t) > 0.7 then val = val * 0.3 end
-        val = val + (math.random() * 2 - 1) * 0.02
-        soundData:setSample(i, math.max(-0.4, math.min(0.4, val)))
+        if sin(2 * pi * 47 * t) > 0.7 then val = val * 0.3 end
+        val = val + (random() * 2 - 1) * 0.02
+        soundData:setSample(i, max(-0.4, min(0.4, val)))
     end
     return soundData
 end
@@ -121,16 +123,16 @@ end
 local function generateCrashImpact(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.4
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     for i = 0, samples - 1 do
         local t   = i / sampleRate
-        local thud  = math.sin(2 * math.pi * 55 * t) * 0.45 * math.exp(-t * 18)
-        local clang = math.sin(2 * math.pi * 310 * t) * 0.20 * math.exp(-t * 22)
-        local env   = math.exp(-t * 14)
-        local noise = (math.random() * 2 - 1) * 0.55 * env
+        local thud  = sin(2 * pi * 55 * t) * 0.45 * exp(-t * 18)
+        local clang = sin(2 * pi * 310 * t) * 0.20 * exp(-t * 22)
+        local env   = exp(-t * 14)
+        local noise = (random() * 2 - 1) * 0.55 * env
         local val   = thud + clang + noise
-        soundData:setSample(i, math.max(-0.75, math.min(0.75, val)))
+        soundData:setSample(i, max(-0.75, min(0.75, val)))
     end
     return soundData
 end
@@ -139,14 +141,14 @@ end
 local function generateTireBlowout(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.5
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     for i = 0, samples - 1 do
         local t   = i / sampleRate
-        local pop = (math.random() * 2 - 1) * math.exp(-t * 60) * 0.8
-        local hiss = (math.random() * 2 - 1) * 0.2 * math.exp(-t * 6)
+        local pop = (random() * 2 - 1) * exp(-t * 60) * 0.8
+        local hiss = (random() * 2 - 1) * 0.2 * exp(-t * 6)
         local val  = pop + hiss
-        soundData:setSample(i, math.max(-0.8, math.min(0.8, val)))
+        soundData:setSample(i, max(-0.8, min(0.8, val)))
     end
     return soundData
 end
@@ -155,17 +157,17 @@ end
 local function generateFlatTireLoop(sampleRate)
     sampleRate = sampleRate or 44100
     local duration  = 0.6
-    local samples   = math.floor(duration * sampleRate)
+    local samples   = floor(duration * sampleRate)
     local soundData = love.sound.newSoundData(samples, sampleRate, 16, 1)
     for i = 0, samples - 1 do
         local t        = i / sampleRate
         local phase    = t / duration
-        local thumpEnv = math.exp(-phase * 18)
-        local thump    = (math.sin(2 * math.pi * 38 * t) + (math.random() * 2 - 1) * 0.25)
+        local thumpEnv = exp(-phase * 18)
+        local thump    = (sin(2 * pi * 38 * t) + (random() * 2 - 1) * 0.25)
                        * thumpEnv * 0.55
-        local rumble   = (math.random() * 2 - 1) * 0.03
+        local rumble   = (random() * 2 - 1) * 0.03
         local val      = thump + rumble
-        soundData:setSample(i, math.max(-0.5, math.min(0.5, val)))
+        soundData:setSample(i, max(-0.5, min(0.5, val)))
     end
     return soundData
 end
@@ -180,12 +182,12 @@ local function generateLapJingle()
     local sampleRate = 44100
     local noteLength = 0.08
     local notes      = {523, 659, 784, 1047}
-    local totalSamples = math.floor(#notes * noteLength * sampleRate)
+    local totalSamples = floor(#notes * noteLength * sampleRate)
     local soundData  = love.sound.newSoundData(totalSamples, sampleRate, 16, 1)
     for i = 0, totalSamples - 1 do
-        local noteIdx = math.min(math.floor(i / (noteLength * sampleRate)) + 1, #notes)
+        local noteIdx = min(floor(i / (noteLength * sampleRate)) + 1, #notes)
         local freq    = notes[noteIdx]
-        local noteT   = (i % math.floor(noteLength * sampleRate)) / (noteLength * sampleRate)
+        local noteT   = (i % floor(noteLength * sampleRate)) / (noteLength * sampleRate)
         local period  = sampleRate / freq
         local waveT   = (i % period) / period
         local val     = waveT < 0.5 and 0.25 or -0.25
@@ -199,15 +201,15 @@ local function generateWinFanfare()
     local sampleRate   = 44100
     local noteLength   = 0.12
     local notes        = {523, 659, 784, 1047, 1319, 1568, 2093}
-    local totalSamples = math.floor(#notes * noteLength * sampleRate)
+    local totalSamples = floor(#notes * noteLength * sampleRate)
     local soundData    = love.sound.newSoundData(totalSamples, sampleRate, 16, 1)
     for i = 0, totalSamples - 1 do
-        local noteIdx = math.min(math.floor(i / (noteLength * sampleRate)) + 1, #notes)
+        local noteIdx = min(floor(i / (noteLength * sampleRate)) + 1, #notes)
         local freq    = notes[noteIdx]
-        local noteT   = (i % math.floor(noteLength * sampleRate)) / (noteLength * sampleRate)
+        local noteT   = (i % floor(noteLength * sampleRate)) / (noteLength * sampleRate)
         local period  = sampleRate / freq
         local waveT   = (i % period) / period
-        local val     = (4 * math.abs(waveT - 0.5) - 1) * 0.3
+        local val     = (4 * abs(waveT - 0.5) - 1) * 0.3
         local env     = 1.0
         if noteT < 0.1 then env = noteT / 0.1
         elseif noteT > 0.6 then env = 1.0 - (noteT - 0.6) / 0.4 end
@@ -223,7 +225,7 @@ end
 local function generateMenuSelect()
     local sampleRate = 44100
     local duration   = 0.1
-    local samples    = math.floor(duration * sampleRate)
+    local samples    = floor(duration * sampleRate)
     local soundData  = love.sound.newSoundData(samples, sampleRate, 16, 1)
     for i = 0, samples - 1 do
         local t      = i / samples
@@ -244,7 +246,7 @@ local function generateBackgroundMusic()
     local barLength  = beatLength * 4
     local totalBars  = 8
     local duration   = totalBars * barLength
-    local samples    = math.floor(duration * sampleRate)
+    local samples    = floor(duration * sampleRate)
     local soundData  = love.sound.newSoundData(samples, sampleRate, 16, 1)
 
     local noteFreqs = {
@@ -268,14 +270,14 @@ local function generateBackgroundMusic()
         "A3","A3","D4","D4","C4","C4","A3","A3",
     }
 
-    local eighthNoteSamples  = math.floor((beatLength / 2) * sampleRate)
-    local quarterNoteSamples = math.floor(beatLength * sampleRate)
+    local eighthNoteSamples  = floor((beatLength / 2) * sampleRate)
+    local quarterNoteSamples = floor(beatLength * sampleRate)
 
     for i = 0, samples - 1 do
         local t            = i / sampleRate
-        local eighthNote   = math.floor(i / eighthNoteSamples)  % 64
-        local quarterNote  = math.floor(i / quarterNoteSamples) % 32
-        local beatInBar    = math.floor(i / quarterNoteSamples) % 4
+        local eighthNote   = floor(i / eighthNoteSamples)  % 64
+        local quarterNote  = floor(i / quarterNoteSamples) % 32
+        local beatInBar    = floor(i / quarterNoteSamples) % 4
         local eighthNotePos  = (i % eighthNoteSamples)  / eighthNoteSamples
         local quarterNotePos = (i % quarterNoteSamples) / quarterNoteSamples
         local val = 0
@@ -298,7 +300,7 @@ local function generateBackgroundMusic()
             local freq   = noteFreqs[bNote]
             local period = sampleRate / freq
             local waveT  = (i % period) / period
-            local tri    = 4 * math.abs(waveT - 0.5) - 1
+            local tri    = 4 * abs(waveT - 0.5) - 1
             local env    = quarterNotePos < 0.02 and quarterNotePos/0.02
                         or (quarterNotePos > 0.6 and (1-(quarterNotePos-0.6)/0.4) or 1.0)
             val = val + tri * 0.15 * env
@@ -309,16 +311,16 @@ local function generateBackgroundMusic()
         if (beatInBar == 0 or beatInBar == 2) and beatPos < 0.15 then
             local kickEnv  = 1 - beatPos / 0.15
             local kickFreq = 60 * (1 + (1 - beatPos/0.15) * 2)
-            val = val + math.sin(2*math.pi*kickFreq*t) * kickEnv * 0.2
+            val = val + sin(2*pi*kickFreq*t) * kickEnv * 0.2
         end
         if (beatInBar == 1 or beatInBar == 3) and beatPos < 0.1 then
-            val = val + (math.random()*2-1) * (1-beatPos/0.1) * 0.12
+            val = val + (random()*2-1) * (1-beatPos/0.1) * 0.12
         end
         if eighthNotePos < 0.05 then
-            val = val + (math.random()*2-1) * (1-eighthNotePos/0.05) * 0.04
+            val = val + (random()*2-1) * (1-eighthNotePos/0.05) * 0.04
         end
 
-        soundData:setSample(i, math.max(-0.5, math.min(0.5, val)))
+        soundData:setSample(i, max(-0.5, min(0.5, val)))
     end
     return soundData
 end
@@ -411,12 +413,12 @@ end
 local function updateMusicFade(dt)
     if not audio.musicPlaying then return end
     local diff = audio.musicTargetVolume - audio.musicVolume
-    if math.abs(diff) > 0.001 then
+    if abs(diff) > 0.001 then
         local change = audio.musicFadeSpeed * dt
         if diff > 0 then
-            audio.musicVolume = math.min(audio.musicTargetVolume, audio.musicVolume + change)
+            audio.musicVolume = min(audio.musicTargetVolume, audio.musicVolume + change)
         else
-            audio.musicVolume = math.max(audio.musicTargetVolume, audio.musicVolume - change)
+            audio.musicVolume = max(audio.musicTargetVolume, audio.musicVolume - change)
         end
         audio.sounds.music:setVolume(audio.musicVolume * audio.masterVolume)
     end
@@ -441,7 +443,7 @@ function audio.update(dt, car, game, track, state)
             audio.enginePlaying = true
         end
 
-        local speedRatio = math.abs(car.speed) / car.physics.maxSpeed
+        local speedRatio = abs(car.speed) / car.physics.maxSpeed
         local pitch      = 0.7 + speedRatio * 0.8
 
         -- Engine sputter when engine is damaged
@@ -450,7 +452,7 @@ function audio.update(dt, car, game, track, state)
         if engineHealth < 0.6 then
             -- Intermittent volume drops simulate misfiring
             local t = love.timer.getTime()
-            local sputter = 0.5 + 0.5 * math.sin(t * 22) * math.sin(t * 7.3)
+            local sputter = 0.5 + 0.5 * sin(t * 22) * sin(t * 7.3)
             local severity = 1 - engineHealth   -- 0..1
             engineVol = engineVol * (1 - severity * 0.7 * (1 - sputter))
             -- Also drop pitch slightly
@@ -463,12 +465,12 @@ function audio.update(dt, car, game, track, state)
 
         -- Grass / off-track
         local onTrack = track.isOnTrack(car.x, car.y)
-        if not onTrack and math.abs(car.speed) > 20 then
+        if not onTrack and abs(car.speed) > 20 then
             if not audio.grassPlaying then
                 audio.sounds.grass:play()
                 audio.grassPlaying = true
             end
-            local grassPitch = 0.8 + (math.abs(car.speed) / car.physics.maxSpeed) * 0.4
+            local grassPitch = 0.8 + (abs(car.speed) / car.physics.maxSpeed) * 0.4
             audio.sounds.grass:setPitch(grassPitch)
         else
             if audio.grassPlaying then
@@ -485,7 +487,7 @@ function audio.update(dt, car, game, track, state)
                 audio.brakePlaying = true
             end
             local brakePitch     = 0.6 + (car.speed / car.physics.maxSpeed) * 0.8
-            local brakeIntensity = math.min(1.0, car.speed / 150)
+            local brakeIntensity = min(1.0, car.speed / 150)
             audio.sounds.brake:setPitch(brakePitch)
             audio.sounds.brake:setVolume(audio.effectsVolume * audio.masterVolume * 0.6 * brakeIntensity)
         else
@@ -499,7 +501,7 @@ function audio.update(dt, car, game, track, state)
         if car.damage then
             local hasFlat = car.damage.flatTires.FL or car.damage.flatTires.FR
                          or car.damage.flatTires.RL or car.damage.flatTires.RR
-            local moving  = math.abs(car.speed) > 15
+            local moving  = abs(car.speed) > 15
 
             if hasFlat and moving then
                 if not audio.flatTirePlaying then
@@ -507,7 +509,7 @@ function audio.update(dt, car, game, track, state)
                     audio.flatTirePlaying = true
                 end
                 -- Pitch up with speed (faster spin = faster thump)
-                local flatPitch = 0.5 + (math.abs(car.speed) / car.physics.maxSpeed) * 1.4
+                local flatPitch = 0.5 + (abs(car.speed) / car.physics.maxSpeed) * 1.4
                 audio.sounds.flatTire:setPitch(flatPitch)
             else
                 if audio.flatTirePlaying then
@@ -534,7 +536,7 @@ function audio.playCrash(force)
     -- force 0..1; small bumps are quieter
     if audio.crashCooldown > 0 then return end
     audio.sounds.crash:stop()
-    local vol = audio.effectsVolume * audio.masterVolume * math.max(0.3, force)
+    local vol = audio.effectsVolume * audio.masterVolume * max(0.3, force)
     audio.sounds.crash:setVolume(vol)
     audio.sounds.crash:play()
     audio.crashCooldown = 0.18   -- avoid overlapping crunches

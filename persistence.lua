@@ -1,13 +1,14 @@
 -- Save/load NPC brain data (uses Love2D filesystem when available, falls back to io)
 
 local persistence = {}
+local floor, abs = math.floor, math.abs
 
 -- Serialize a Lua value to a string representation
 local function serializeValue(v, indent)
     local t = type(v)
     if t == "number" then
         -- Use enough precision for neural network weights
-        if v == math.floor(v) and math.abs(v) < 1e15 then
+        if v == floor(v) and abs(v) < 1e15 then
             return tostring(v)
         end
         return string.format("%.17g", v)
@@ -32,7 +33,7 @@ function persistence.serialize(tbl, indent)
     local isArray = true
     local maxN = 0
     for k in pairs(tbl) do
-        if type(k) == "number" and k == math.floor(k) and k > 0 then
+        if type(k) == "number" and k == floor(k) and k > 0 then
             if k > maxN then maxN = k end
         else
             isArray = false

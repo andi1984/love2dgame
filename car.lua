@@ -4,6 +4,8 @@ local damage = require("damage")
 
 local Car = {}
 Car.__index = Car
+local abs, min, max, cos, sin = math.abs, math.min, math.max, math.cos, math.sin
+local random, pi = math.random, math.pi
 
 function Car.new(track, overrides)
     local self = setmetatable({}, Car)
@@ -63,9 +65,9 @@ function Car.new(track, overrides)
 
     -- Apply lateral offset (perpendicular to track direction) for grid starts
     if overrides.lateralOffset and overrides.lateralOffset ~= 0 then
-        local perpAngle = self.angle + math.pi / 2
-        self.x = self.x + math.cos(perpAngle) * overrides.lateralOffset
-        self.y = self.y + math.sin(perpAngle) * overrides.lateralOffset
+        local perpAngle = self.angle + pi / 2
+        self.x = self.x + cos(perpAngle) * overrides.lateralOffset
+        self.y = self.y + sin(perpAngle) * overrides.lateralOffset
     end
 
     -- Damage state (always present)
@@ -88,14 +90,14 @@ function Car:update(dt, input, track)
     local dmgMods = damage.getHandlingModifiers(self.damage)
 
     -- Tire pressure grip
-    local pressureDev  = math.abs(physics.tirePressure - physics.optimalPressure)
-    local pressureGrip = math.max(0.3, 1.0 - pressureDev * 0.4)
+    local pressureDev  = abs(physics.tirePressure - physics.optimalPressure)
+    local pressureGrip = max(0.3, 1.0 - pressureDev * 0.4)
 
     -- Effective grip (also reduced by average tire health)
     local surfaceGrip   = onTrack and zone.grip or 0.3
     local effectiveGrip = surfaceGrip * pressureGrip * physics.gripMultiplier
                         * dmgMods.avgTireHealth
-    effectiveGrip = math.min(1.0, math.max(0.1, effectiveGrip))
+    effectiveGrip = min(1.0, max(0.1, effectiveGrip))
 
     -- Bumpiness: suspension damage amplifies it; flat tires add periodic thump
     local baseBump = onTrack and (zone.bumpiness * physics.bumpMultiplier) or 0.0
@@ -103,11 +105,11 @@ function Car:update(dt, input, track)
 
     -- Flat-tire periodic thumping: each flat wheel adds low-frequency perturbation
     local flatCount = damage.flatTireCount(self.damage)
-    if flatCount > 0 and math.abs(self.speed) > 15 then
+    if flatCount > 0 and abs(self.speed) > 15 then
         -- Thump frequency scales with speed (like wheel hitting rim each revolution)
-        local thumpFreq = math.abs(self.speed) / 60   -- ~1 thump/sec at speed 60
+        local thumpFreq = abs(self.speed) / 60   -- ~1 thump/sec at speed 60
         local thumpPhase = (love and love.timer and love.timer.getTime() or 0) * thumpFreq
-        local thump = math.max(0, math.sin(thumpPhase * 2 * math.pi))
+        local thump = max(0, sin(thumpPhase * 2 * pi))
         bumpiness = bumpiness + thump * flatCount * 0.35
     end
 
@@ -128,7 +130,7 @@ function Car:update(dt, input, track)
     end
 
     -- Drag (body damage increases drag)
-    local dragForce = physics.dragCoeff * self.speed * math.abs(self.speed) * dmgMods.dragMult
+    local dragForce = physics.dragCoeff * self.speed * abs(self.speed) * dmgMods.dragMult
 
     -- Rolling resistance
     local rollingForce = physics.rollingResistance * totalMass * 9.81
@@ -136,7 +138,7 @@ function Car:update(dt, input, track)
     -- Off-track grass drag
     local grassDrag = 0
     if not onTrack then
-        grassDrag = math.abs(self.speed) * 3.0
+        grassDrag = abs(self.speed) * 3.0
     end
 
     -- Net force
@@ -155,32 +157,32 @@ function Car:update(dt, input, track)
     self.speed  = self.speed + accel * dt
 
     -- Bumpiness perturbation (suspension damage amplified)
-    if bumpiness > 0.01 and math.abs(self.speed) > 20 then
-        local bumpMag = bumpiness * math.abs(self.speed) * 0.0003
-        self.speed = self.speed + (math.random() - 0.5) * bumpMag * self.speed
-        self.angle = self.angle + (math.random() - 0.5) * bumpiness * 0.005
+    if bumpiness > 0.01 and abs(self.speed) > 20 then
+        local bumpMag = bumpiness * abs(self.speed) * 0.0003
+        self.speed = self.speed + (random() - 0.5) * bumpMag * self.speed
+        self.angle = self.angle + (random() - 0.5) * bumpiness * 0.005
     end
 
     -- Clamp speed (max speed reduced by damage)
     local effectiveMaxSpeed = physics.maxSpeed * dmgMods.maxSpeedMult
-    self.speed = math.max(-100, math.min(effectiveMaxSpeed, self.speed))
+    self.speed = max(-100, min(effectiveMaxSpeed, self.speed))
 
     -- Stop drifting at low speeds
-    if math.abs(self.speed) < 1 and throttle == 0 and not braking then
+    if abs(self.speed) < 1 and throttle == 0 and not braking then
         self.speed = 0
     end
 
     -- Fuel consumption
     if throttle > 0 then
-        physics.fuelMass = math.max(0, physics.fuelMass - physics.fuelRate * dt)
+        physics.fuelMass = max(0, physics.fuelMass - physics.fuelRate * dt)
     end
 
     -- Turning (supports both boolean left/right and continuous steer)
-    local turnFactor = math.min(1, math.abs(self.speed) / 100) * effectiveGrip
+    local turnFactor = min(1, abs(self.speed) / 100) * effectiveGrip
     self.turning = false
     if input.steer then
-        local steerVal = math.max(-1, math.min(1, input.steer))
-        if math.abs(steerVal) > 0.05 then
+        local steerVal = max(-1, min(1, input.steer))
+        if abs(steerVal) > 0.05 then
             self.angle   = self.angle + physics.baseTurnSpeed * steerVal * turnFactor * dt
             self.turning = true
         end
@@ -197,26 +199,26 @@ function Car:update(dt, input, track)
 
     -- Tire pull: asymmetric damage pulls the car to one side
     -- Player must compensate with steering (NPCs experience it through physics)
-    if math.abs(dmgMods.tirePull) > 0.01 and math.abs(self.speed) > 10 then
+    if abs(dmgMods.tirePull) > 0.01 and abs(self.speed) > 10 then
         local pullTurn = dmgMods.tirePull * physics.baseTurnSpeed * 0.35 * turnFactor
         self.angle = self.angle + pullTurn * dt
     end
 
     -- Move car
-    self.x = self.x + math.cos(self.angle) * self.speed * dt
-    self.y = self.y + math.sin(self.angle) * self.speed * dt
+    self.x = self.x + cos(self.angle) * self.speed * dt
+    self.y = self.y + sin(self.angle) * self.speed * dt
 
     -- Keep in bounds
-    self.x = math.max(10, math.min(790, self.x))
-    self.y = math.max(10, math.min(590, self.y))
+    self.x = max(10, min(790, self.x))
+    self.y = max(10, min(590, self.y))
 
     -- Smoke flags
     local isBraking    = input.down and self.speed > 50
-    local isSharpTurn  = self.turning and math.abs(self.speed) > 120
+    local isSharpTurn  = self.turning and abs(self.speed) > 120
     self.shouldSpawnSmoke     = isBraking or isSharpTurn
     -- Dark engine-damage smoke when engine is hurt and car is moving
     self.shouldSpawnDarkSmoke = self.damage and self.damage.engine < 0.55
-                                and math.abs(self.speed) > 25
+                                and abs(self.speed) > 25
 end
 
 return Car

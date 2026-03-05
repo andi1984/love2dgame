@@ -24,6 +24,14 @@ function devmenu.init(physics)
     }
 end
 
+-- Apply slider value from an x-coordinate (shared by mousepressed and mousemoved)
+local function applySliderAt(x, slider)
+    local sx = devmenu.panelX + 105
+    local sw = devmenu.panelW - 115
+    local t = math.max(0, math.min(1, (x - sx) / sw))
+    slider.set(slider.min + t * (slider.max - slider.min))
+end
+
 function devmenu.mousepressed(x, y, button)
     if not devmenu.open or button ~= 1 then return end
     for i, s in ipairs(devmenu.sliders) do
@@ -32,8 +40,7 @@ function devmenu.mousepressed(x, y, button)
         local sw = devmenu.panelW - 115
         if x >= sx and x <= sx + sw and y >= sy and y <= sy + devmenu.sliderH then
             devmenu.activeSlider = i
-            local t = math.max(0, math.min(1, (x - sx) / sw))
-            s.set(s.min + t * (s.max - s.min))
+            applySliderAt(x, s)
         end
     end
 end
@@ -46,11 +53,7 @@ end
 
 function devmenu.mousemoved(x, y)
     if not devmenu.open or not devmenu.activeSlider then return end
-    local s = devmenu.sliders[devmenu.activeSlider]
-    local sx = devmenu.panelX + 105
-    local sw = devmenu.panelW - 115
-    local t = math.max(0, math.min(1, (x - sx) / sw))
-    s.set(s.min + t * (s.max - s.min))
+    applySliderAt(x, devmenu.sliders[devmenu.activeSlider])
 end
 
 return devmenu

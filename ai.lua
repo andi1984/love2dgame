@@ -1,11 +1,14 @@
 -- AI sensor system and driving bridge (pure logic, no Love2D dependency)
 
 local ai = {}
+local cos, sin, abs, sqrt, min, max = math.cos, math.sin, math.abs, math.sqrt, math.min, math.max
+local atan2, log, random, pi, huge = math.atan2, math.log, math.random, math.pi, math.huge
+local TWO_PI = 2 * pi
 
 -- Normalize angle to [-pi, pi]
 local function normalizeAngle(a)
-    while a > math.pi do a = a - 2 * math.pi end
-    while a < -math.pi do a = a + 2 * math.pi end
+    while a > pi do a = a - TWO_PI end
+    while a < -pi do a = a + TWO_PI end
     return a
 end
 
@@ -20,9 +23,9 @@ local function calculateCurvature(track, pct, lookAhead)
         local nextPct = (samplePct + 0.005) % 1.0
         local p2 = track.getPointAtPercent(nextPct)
         if p1 and p2 then
-            local angle = math.atan2(p2.y - p1.y, p2.x - p1.x)
+            local angle = atan2(p2.y - p1.y, p2.x - p1.x)
             if prevAngle then
-                totalAngleChange = totalAngleChange + math.abs(normalizeAngle(angle - prevAngle))
+                totalAngleChange = totalAngleChange + abs(normalizeAngle(angle - prevAngle))
             end
             prevAngle = angle
         end
@@ -35,18 +38,18 @@ local function calculateCurvature(track, pct, lookAhead)
         local startNextPct = (pct + 0.005) % 1.0
         local startNext = track.getPointAtPercent(startNextPct)
         if startNext then
-            local fwd = math.atan2(startNext.y - startPt.y, startNext.x - startPt.x)
-            local toEnd = math.atan2(endPt.y - startPt.y, endPt.x - startPt.x)
+            local fwd = atan2(startNext.y - startPt.y, startNext.x - startPt.x)
+            local toEnd = atan2(endPt.y - startPt.y, endPt.x - startPt.x)
             sign = normalizeAngle(toEnd - fwd) > 0 and 1 or -1
         end
     end
-    local avgChange = totalAngleChange / math.max(1, steps)
-    return math.max(-1, math.min(1, avgChange / math.pi * sign))
+    local avgChange = totalAngleChange / max(1, steps)
+    return max(-1, min(1, avgChange / pi * sign))
 end
 
 -- Find signed distance from car to closest center point
 local function signedDistToCenter(car, track)
-    local minDist = math.huge
+    local minDist = huge
     local bestIdx = 1
     for i, p in ipairs(track.centerPath) do
         local dx = car.x - p.x
@@ -57,7 +60,7 @@ local function signedDistToCenter(car, track)
             bestIdx = i
         end
     end
-    minDist = math.sqrt(minDist)
+    minDist = sqrt(minDist)
 
     -- Determine side using cross product with track tangent
     local n = #track.centerPath
@@ -79,13 +82,14 @@ local function raycastToEdge(car, track, angleOffset)
     local maxDist = 120
     local step = 4
     local angle = car.angle + angleOffset
-    local cosA = math.cos(angle)
-    local sinA = math.sin(angle)
+    local cosA = cos(angle)
+    local sinA = sin(angle)
     local halfWidth = (track.width or 75) / 2
+    local halfWidthSq = halfWidth * halfWidth
 
     -- Find starting nearest center index for efficient local search
     local bestIdx = 1
-    local minD = math.huge
+    local minD = huge
     for i, p in ipairs(track.centerPath) do
         local dx = car.x - p.x
         local dy = car.y - p.y
@@ -106,7 +110,7 @@ local function raycastToEdge(car, track, angleOffset)
         end
 
         -- Search for nearest center point near last known index
-        local localMin = math.huge
+        local localMin = huge
         local localBest = bestIdx
         for offset = -searchRadius, searchRadius do
             local idx = ((bestIdx - 1 + offset) % n) + 1
@@ -118,7 +122,7 @@ local function raycastToEdge(car, track, angleOffset)
         end
         bestIdx = localBest
 
-        if math.sqrt(localMin) > halfWidth then
+        if localMin > halfWidthSq then
             return dist / maxDist
         end
     end
@@ -136,8 +140,8 @@ function ai.getSensorInputs(car, track)
     local targetPct = (pct + 0.03) % 1.0
     local target = track.getPointAtPercent(targetPct)
     if target then
-        local desiredAngle = math.atan2(target.y - car.y, target.x - car.x)
-        inputs[1] = normalizeAngle(desiredAngle - car.angle) / math.pi
+        local desiredAngle = atan2(target.y - car.y, target.x - car.x)
+        inputs[1] = normalizeAngle(desiredAngle - car.angle) / pi
     else
         inputs[1] = 0
     end
@@ -145,7 +149,7 @@ function ai.getSensorInputs(car, track)
     -- 2: Signed distance to center line, normalized by half track width
     local signedDist = signedDistToCenter(car, track)
     local halfWidth = (track.width or 75) / 2
-    inputs[2] = math.max(-1, math.min(1, signedDist / halfWidth))
+    inputs[2] = max(-1, min(1, signedDist / halfWidth))
 
     -- 3: Speed ratio
     inputs[3] = car.speed / car.physics.maxSpeed
@@ -157,8 +161,8 @@ function ai.getSensorInputs(car, track)
     local nearPct = (pct + 0.05) % 1.0
     local near = track.getPointAtPercent(nearPct)
     if near then
-        local nearAngle = math.atan2(near.y - car.y, near.x - car.x)
-        inputs[5] = normalizeAngle(nearAngle - car.angle) / math.pi
+        local nearAngle = atan2(near.y - car.y, near.x - car.x)
+        inputs[5] = normalizeAngle(nearAngle - car.angle) / pi
     else
         inputs[5] = 0
     end
@@ -167,8 +171,8 @@ function ai.getSensorInputs(car, track)
     local farPct = (pct + 0.15) % 1.0
     local far = track.getPointAtPercent(farPct)
     if far then
-        local farAngle = math.atan2(far.y - car.y, far.x - car.x)
-        inputs[6] = normalizeAngle(farAngle - car.angle) / math.pi
+        local farAngle = atan2(far.y - car.y, far.x - car.x)
+        inputs[6] = normalizeAngle(farAngle - car.angle) / pi
     else
         inputs[6] = 0
     end
@@ -182,11 +186,11 @@ function ai.getSensorInputs(car, track)
 
     -- 9-13: Raycast distances to track edge (normalized 0-1)
     -- Left (-90°), Front-left (-45°), Front (0°), Front-right (+45°), Right (+90°)
-    inputs[9]  = raycastToEdge(car, track, -math.pi / 2)
-    inputs[10] = raycastToEdge(car, track, -math.pi / 4)
+    inputs[9]  = raycastToEdge(car, track, -pi / 2)
+    inputs[10] = raycastToEdge(car, track, -pi / 4)
     inputs[11] = raycastToEdge(car, track, 0)
-    inputs[12] = raycastToEdge(car, track, math.pi / 4)
-    inputs[13] = raycastToEdge(car, track, math.pi / 2)
+    inputs[12] = raycastToEdge(car, track, pi / 4)
+    inputs[13] = raycastToEdge(car, track, pi / 2)
 
     return inputs
 end
@@ -196,7 +200,7 @@ function ai.outputToInput(outputs)
     -- Continuous steering: difference between right and left outputs
     -- outputs[3] = left tendency, outputs[4] = right tendency
     local steer = (outputs[4] - outputs[3]) * 2  -- range [-2, 2], clamped in car
-    steer = math.max(-1, math.min(1, steer))
+    steer = max(-1, min(1, steer))
 
     return {
         up = outputs[1] > 0.5,
@@ -214,9 +218,9 @@ function ai.applySensorNoise(inputs, errors)
     local mag = errors.sensorNoise
     for i, v in ipairs(inputs) do
         -- Box-Muller gaussian noise
-        local u1 = math.max(1e-10, math.random())
-        local u2 = math.random()
-        local gaussian = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+        local u1 = max(1e-10, random())
+        local u2 = random()
+        local gaussian = sqrt(-2 * log(u1)) * cos(TWO_PI * u2)
         noisy[i] = v + gaussian * mag
     end
     return noisy
@@ -237,10 +241,10 @@ function ai.applyErrors(car, input, dt)
     else
         -- Roll for a new lapse
         local chance = (errors.lapseChance or 0) * dt
-        if math.random() < chance then
+        if random() < chance then
             local minDur = errors.lapseDurationMin or 0.2
             local maxDur = errors.lapseDurationMax or 0.5
-            car.lapseTimer = minDur + math.random() * (maxDur - minDur)
+            car.lapseTimer = minDur + random() * (maxDur - minDur)
             car.lastInput = input
             return input  -- start of lapse: use current input, then freeze it
         end
@@ -248,7 +252,7 @@ function ai.applyErrors(car, input, dt)
 
     -- Brake-late: occasionally ignore the brake signal
     local brakeLate = (errors.brakeLateChance or 0) * dt
-    if input.down and math.random() < brakeLate then
+    if input.down and random() < brakeLate then
         input = {
             up = input.up,
             down = false,
@@ -259,13 +263,13 @@ function ai.applyErrors(car, input, dt)
     -- Steering jitter: random wobble added to steer value
     local jitter = errors.steerJitter or 0
     if jitter > 0 then
-        local u1 = math.max(1e-10, math.random())
-        local u2 = math.random()
-        local gaussian = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+        local u1 = max(1e-10, random())
+        local u2 = random()
+        local gaussian = sqrt(-2 * log(u1)) * cos(TWO_PI * u2)
         input = {
             up = input.up,
             down = input.down,
-            steer = math.max(-1, math.min(1, input.steer + gaussian * jitter)),
+            steer = max(-1, min(1, input.steer + gaussian * jitter)),
         }
     end
 
@@ -294,14 +298,14 @@ function ai.updateMetrics(car, dt, track)
     if not track.isOnTrack(car.x, car.y) then
         car.timeOffTrack = car.timeOffTrack + dt
     end
-    if math.abs(car.speed) < 5 then
+    if abs(car.speed) < 5 then
         car.timeStationary = car.timeStationary + dt
         car.stuckTimer = car.stuckTimer + dt
     else
         car.stuckTimer = 0
     end
     car.speedSamples = car.speedSamples + 1
-    car.avgSpeed = car.avgSpeed + (math.abs(car.speed) - car.avgSpeed) / car.speedSamples
+    car.avgSpeed = car.avgSpeed + (abs(car.speed) - car.avgSpeed) / car.speedSamples
 
     -- Stuck override countdown
     if car.stuckOverride > 0 then
@@ -314,14 +318,14 @@ function ai.getStuckOverride(car)
     if car.stuckTimer > 2 then
         car.stuckTimer = 0
         car.stuckOverride = 0.5
-        car.stuckSteerDir = math.random() < 0.5 and -1 or 1
+        car.stuckSteerDir = random() < 0.5 and -1 or 1
     end
     if car.stuckOverride > 0 then
-        return {
-            up = false,
-            down = true,
-            steer = car.stuckSteerDir,
-        }
+        if not car._stuckInput then
+            car._stuckInput = { up = false, down = true, steer = 0 }
+        end
+        car._stuckInput.steer = car.stuckSteerDir
+        return car._stuckInput
     end
     return nil
 end

@@ -26,6 +26,11 @@ local savedNpcData = nil
 -- Current network architecture
 local NET_ARCH = {13, 16, 4}
 
+-- Reusable per-frame tables (avoid hot-path allocations)
+local playerInput = { up = false, down = false, left = false, right = false }
+local prevLaps = {}
+local DUMMY_CAR = { speed = 0, prevSpeed = 0, physics = { maxSpeed = 320 } }
+
 -- Load or create a brain for an NPC profile
 local function loadOrCreateBrain(profile)
     local data = savedNpcData and savedNpcData.npcs and savedNpcData.npcs[profile.name]
@@ -185,7 +190,7 @@ end
 
 function love.update(dt)
     -- Always update audio for music fading
-    audio.update(dt, cars[1] or {speed = 0, prevSpeed = 0, physics = {maxSpeed = 320}}, game, track, state)
+    audio.update(dt, cars[1] or DUMMY_CAR, game, track, state)
 
     if state.is("menu") then
         return
@@ -210,15 +215,12 @@ function love.update(dt)
 
         game.timer = game.timer + dt
 
-        -- Player input
-        local playerInput = {
-            up = love.keyboard.isDown("up"),
-            down = love.keyboard.isDown("down"),
-            left = love.keyboard.isDown("left"),
-            right = love.keyboard.isDown("right"),
-        }
+        -- Player input (reuse module-level table)
+        playerInput.up = love.keyboard.isDown("up")
+        playerInput.down = love.keyboard.isDown("down")
+        playerInput.left = love.keyboard.isDown("left")
+        playerInput.right = love.keyboard.isDown("right")
 
-        local prevLaps = {}
         for i = 1, #cars do
             prevLaps[i] = game.carLaps[i] or 0
         end

@@ -1,6 +1,8 @@
 -- Simple feedforward neural network (pure Lua, no dependencies)
 
 local nnet = {}
+local exp, tanh, sqrt, log, cos = math.exp, math.tanh, math.sqrt, math.log, math.cos
+local random, pi = math.random, math.pi
 
 -- Create a new neural network with given layer sizes
 -- e.g. nnet.new({8, 12, 4}) = 8 inputs, 12 hidden, 4 outputs
@@ -14,11 +16,11 @@ function nnet.new(layerSizes, initialBias)
             outputSize = layerSizes[i],
         }
         -- Xavier initialization
-        local scale = math.sqrt(2.0 / (layerSizes[i - 1] + layerSizes[i]))
+        local scale = sqrt(2.0 / (layerSizes[i - 1] + layerSizes[i]))
         for o = 1, layerSizes[i] do
             layer.weights[o] = {}
             for j = 1, layerSizes[i - 1] do
-                layer.weights[o][j] = (math.random() * 2 - 1) * scale
+                layer.weights[o][j] = (random() * 2 - 1) * scale
             end
             layer.biases[o] = 0
         end
@@ -56,10 +58,10 @@ function nnet.forward(net, inputs)
             end
             if isOutput then
                 -- Sigmoid for output layer: map to [0, 1]
-                outputs[o] = 1.0 / (1.0 + math.exp(-sum))
+                outputs[o] = 1.0 / (1.0 + exp(-sum))
             else
                 -- Tanh for hidden layers
-                outputs[o] = math.tanh(sum)
+                outputs[o] = tanh(sum)
             end
         end
         current = outputs
@@ -120,12 +122,12 @@ function nnet.mutate(net, mutationRate, mutationStrength)
     mutationStrength = mutationStrength or 0.3
     local data = nnet.serialize(net)
     for i, w in ipairs(data.weights) do
-        if math.random() < mutationRate then
+        if random() < mutationRate then
             -- Box-Muller for Gaussian noise
-            local u1 = math.random()
-            local u2 = math.random()
+            local u1 = random()
+            local u2 = random()
             if u1 < 1e-10 then u1 = 1e-10 end
-            local gaussian = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+            local gaussian = sqrt(-2 * log(u1)) * cos(2 * pi * u2)
             data.weights[i] = w + gaussian * mutationStrength
         end
     end
@@ -183,7 +185,7 @@ function nnet.createSeeded(layerSizes)
     local scale = 0.15
     for o = 11, numHidden do
         for j = 1, numInputs do
-            hidden.weights[o][j] = (math.random() * 2 - 1) * scale
+            hidden.weights[o][j] = (random() * 2 - 1) * scale
         end
     end
 
@@ -246,7 +248,7 @@ function nnet.crossover(net1, net2)
     local d2 = nnet.serialize(net2)
     local child = { layerSizes = d1.layerSizes, weights = {} }
     for i = 1, #d1.weights do
-        child.weights[i] = math.random() < 0.5 and d1.weights[i] or d2.weights[i]
+        child.weights[i] = random() < 0.5 and d1.weights[i] or d2.weights[i]
     end
     return nnet.deserialize(child)
 end

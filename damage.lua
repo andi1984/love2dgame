@@ -2,10 +2,12 @@
 -- Tracks structural damage per car and computes handling modifiers
 
 local damage = {}
+local abs, sqrt, max, min, cos, sin = math.abs, math.sqrt, math.max, math.min, math.cos, math.sin
 
 local FLAT_TIRE_THRESHOLD  = 0.25   -- below this = flat tire
 local CURB_DAMAGE_PER_SEC  = 0.05   -- damage/sec at max speed on curbs
 local OFFROAD_WEAR_PER_SEC = 0.008  -- very slow off-road tire wear
+local WHEEL_POSITIONS = {"FL", "FR", "RL", "RR"}
 
 -- Create a fresh damage state for a car
 function damage.create()
@@ -48,44 +50,95 @@ function damage.updateEnvironment(dmg, car, track, dt)
 
     -- Decay impact flash
     if dmg.impactFlash > 0 then
-        dmg.impactFlash = math.max(0, dmg.impactFlash - dt)
+        dmg.impactFlash = max(0, dmg.impactFlash - dt)
     end
 
-    local speed   = math.abs(car.speed)
+    local speed   = abs(car.speed)
     local onTrack = track.isOnTrack(car.x, car.y)
     local zone    = track.getSurfaceAt(car.x, car.y)
 
     -- Curb damage: on-track but low-grip zone (curb tiles)
     local onCurb = onTrack and zone and zone.grip < 0.72 and zone.grip > 0.2
     if onCurb and speed > 20 then
-        local intensity = math.min(1.0, speed / 200)
+        local intensity = min(1.0, speed / 200)
         local curbDmg   = CURB_DAMAGE_PER_SEC * intensity * dt
 
         -- Front tires and suspension take most of the hit
-        dmg.tires.FL      = math.max(0, dmg.tires.FL      - curbDmg * 0.9)
-        dmg.tires.FR      = math.max(0, dmg.tires.FR      - curbDmg * 0.9)
-        dmg.tires.RL      = math.max(0, dmg.tires.RL      - curbDmg * 0.5)
-        dmg.tires.RR      = math.max(0, dmg.tires.RR      - curbDmg * 0.5)
-        dmg.suspension.FL = math.max(0, dmg.suspension.FL - curbDmg * 0.4)
-        dmg.suspension.FR = math.max(0, dmg.suspension.FR - curbDmg * 0.4)
+        dmg.tires.FL      = max(0, dmg.tires.FL      - curbDmg * 0.9)
+        dmg.tires.FR      = max(0, dmg.tires.FR      - curbDmg * 0.9)
+        dmg.tires.RL      = max(0, dmg.tires.RL      - curbDmg * 0.5)
+        dmg.tires.RR      = max(0, dmg.tires.RR      - curbDmg * 0.5)
+        dmg.suspension.FL = max(0, dmg.suspension.FL - curbDmg * 0.4)
+        dmg.suspension.FR = max(0, dmg.suspension.FR - curbDmg * 0.4)
     end
 
     -- Off-road wear (very slow)
     if not onTrack and speed > 30 then
-        local wear = OFFROAD_WEAR_PER_SEC * math.min(1.0, speed / 150) * dt
-        dmg.tires.FL = math.max(0, dmg.tires.FL - wear)
-        dmg.tires.FR = math.max(0, dmg.tires.FR - wear)
-        dmg.tires.RL = math.max(0, dmg.tires.RL - wear)
-        dmg.tires.RR = math.max(0, dmg.tires.RR - wear)
+        local wear = OFFROAD_WEAR_PER_SEC * min(1.0, speed / 150) * dt
+        dmg.tires.FL = max(0, dmg.tires.FL - wear)
+        dmg.tires.FR = max(0, dmg.tires.FR - wear)
+        dmg.tires.RL = max(0, dmg.tires.RL - wear)
+        dmg.tires.RR = max(0, dmg.tires.RR - wear)
     end
 
     -- Update flat-tire state and flag new flats
-    for _, pos in ipairs({"FL", "FR", "RL", "RR"}) do
+    for _, pos in ipairs(WHEEL_POSITIONS) do
         local wasFlat = dmg.flatTires[pos]
         dmg.flatTires[pos] = dmg.tires[pos] < FLAT_TIRE_THRESHOLD
         if dmg.flatTires[pos] and not wasFlat then
             dmg.newFlat = true
         end
+    end
+end
+
+-- ----------------------------------------------------------------
+-- Helper functions for collision damage (no upvalue captures)
+-- ----------------------------------------------------------------
+
+-- Transform collision normal into a car's local frame to determine impact side
+local function getSide(car, worldNX, worldNY)
+    local ca = cos(-car.angle)
+    local sa = sin(-car.angle)
+    local lx  = worldNX * ca - worldNY * sa
+    local ly  = worldNX * sa + worldNY * ca
+    if abs(lx) >= abs(ly) then
+        return lx > 0 and "front" or "rear"
+    else
+        return ly > 0 and "right" or "left"
+    end
+end
+
+-- Apply tire damage based on impact side
+local function applyTireDmg(dmg, side, amt)
+    if side == "front" then
+        dmg.tires.FL = max(0, dmg.tires.FL - amt * 0.45)
+        dmg.tires.FR = max(0, dmg.tires.FR - amt * 0.45)
+    elseif side == "rear" then
+        dmg.tires.RL = max(0, dmg.tires.RL - amt * 0.45)
+        dmg.tires.RR = max(0, dmg.tires.RR - amt * 0.45)
+    elseif side == "left" then
+        dmg.tires.FL = max(0, dmg.tires.FL - amt * 0.65)
+        dmg.tires.RL = max(0, dmg.tires.RL - amt * 0.65)
+    elseif side == "right" then
+        dmg.tires.FR = max(0, dmg.tires.FR - amt * 0.65)
+        dmg.tires.RR = max(0, dmg.tires.RR - amt * 0.65)
+    end
+end
+
+-- Apply suspension damage based on impact side
+local function applySuspDmg(dmg, side, amt)
+    if side == "front" then
+        dmg.suspension.FL = max(0, dmg.suspension.FL - amt * 0.5)
+        dmg.suspension.FR = max(0, dmg.suspension.FR - amt * 0.5)
+    elseif side == "rear" then
+        dmg.suspension.RL = max(0, dmg.suspension.RL - amt * 0.5)
+        dmg.suspension.RR = max(0, dmg.suspension.RR - amt * 0.5)
+    elseif side == "left" then
+        dmg.suspension.FL = max(0, dmg.suspension.FL - amt * 0.55)
+        dmg.suspension.RL = max(0, dmg.suspension.RL - amt * 0.55)
+    elseif side == "right" then
+        dmg.suspension.FR = max(0, dmg.suspension.FR - amt * 0.55)
+        dmg.suspension.RR = max(0, dmg.suspension.RR - amt * 0.55)
     end
 end
 
@@ -99,84 +152,42 @@ function damage.applyCollision(dmg1, car1, dmg2, car2, impactSpeed)
     -- Direction from car1 to car2 (world space)
     local dx   = car2.x - car1.x
     local dy   = car2.y - car1.y
-    local dist = math.sqrt(dx * dx + dy * dy)
+    local dist = sqrt(dx * dx + dy * dy)
     if dist < 0.01 then return end
     local nx, ny = dx / dist, dy / dist
 
-    -- Transform into each car's local frame to determine impact side
-    local function getSide(car, worldNX, worldNY)
-        local cos = math.cos(-car.angle)
-        local sin = math.sin(-car.angle)
-        local lx  = worldNX * cos - worldNY * sin
-        local ly  = worldNX * sin + worldNY * cos
-        if math.abs(lx) >= math.abs(ly) then
-            return lx > 0 and "front" or "rear"
-        else
-            return ly > 0 and "right" or "left"
-        end
-    end
-
+    -- Determine impact side for each car
     local side1 = getSide(car1,  nx,  ny)
     local side2 = getSide(car2, -nx, -ny)
 
     -- Damage scales quadratically with speed (severe at high speed)
-    local force       = math.min(1.0, (impactSpeed / 120) ^ 2)
-    local linearForce = math.min(1.0,  impactSpeed / 120)
+    local force       = min(1.0, (impactSpeed / 120) ^ 2)
+    local linearForce = min(1.0,  impactSpeed / 120)
 
     -- Body panels
-    dmg1.body[side1] = math.max(0, dmg1.body[side1] - force * 0.75)
-    dmg2.body[side2] = math.max(0, dmg2.body[side2] - force * 0.75)
+    dmg1.body[side1] = max(0, dmg1.body[side1] - force * 0.75)
+    dmg2.body[side2] = max(0, dmg2.body[side2] - force * 0.75)
 
     -- Tire damage based on impact side
-    local function applyTireDmg(dmg, side, amt)
-        if side == "front" then
-            dmg.tires.FL = math.max(0, dmg.tires.FL - amt * 0.45)
-            dmg.tires.FR = math.max(0, dmg.tires.FR - amt * 0.45)
-        elseif side == "rear" then
-            dmg.tires.RL = math.max(0, dmg.tires.RL - amt * 0.45)
-            dmg.tires.RR = math.max(0, dmg.tires.RR - amt * 0.45)
-        elseif side == "left" then
-            dmg.tires.FL = math.max(0, dmg.tires.FL - amt * 0.65)
-            dmg.tires.RL = math.max(0, dmg.tires.RL - amt * 0.65)
-        elseif side == "right" then
-            dmg.tires.FR = math.max(0, dmg.tires.FR - amt * 0.65)
-            dmg.tires.RR = math.max(0, dmg.tires.RR - amt * 0.65)
-        end
-    end
     applyTireDmg(dmg1, side1, linearForce)
     applyTireDmg(dmg2, side2, linearForce)
 
     -- Engine damage on severe frontal / rear collisions
     if force > 0.35 then
         if side1 == "front" or side1 == "rear" then
-            dmg1.engine = math.max(0, dmg1.engine - force * 0.40)
+            dmg1.engine = max(0, dmg1.engine - force * 0.40)
         end
         if side2 == "front" or side2 == "rear" then
-            dmg2.engine = math.max(0, dmg2.engine - force * 0.40)
+            dmg2.engine = max(0, dmg2.engine - force * 0.40)
         end
     end
 
     -- Suspension damage
-    local function applySuspDmg(dmg, side, amt)
-        if side == "front" then
-            dmg.suspension.FL = math.max(0, dmg.suspension.FL - amt * 0.5)
-            dmg.suspension.FR = math.max(0, dmg.suspension.FR - amt * 0.5)
-        elseif side == "rear" then
-            dmg.suspension.RL = math.max(0, dmg.suspension.RL - amt * 0.5)
-            dmg.suspension.RR = math.max(0, dmg.suspension.RR - amt * 0.5)
-        elseif side == "left" then
-            dmg.suspension.FL = math.max(0, dmg.suspension.FL - amt * 0.55)
-            dmg.suspension.RL = math.max(0, dmg.suspension.RL - amt * 0.55)
-        elseif side == "right" then
-            dmg.suspension.FR = math.max(0, dmg.suspension.FR - amt * 0.55)
-            dmg.suspension.RR = math.max(0, dmg.suspension.RR - amt * 0.55)
-        end
-    end
     applySuspDmg(dmg1, side1, linearForce)
     applySuspDmg(dmg2, side2, linearForce)
 
     -- Update flat-tire state
-    for _, pos in ipairs({"FL", "FR", "RL", "RR"}) do
+    for _, pos in ipairs(WHEEL_POSITIONS) do
         local wasFlat1 = dmg1.flatTires[pos]
         local wasFlat2 = dmg2.flatTires[pos]
         dmg1.flatTires[pos] = dmg1.tires[pos] < FLAT_TIRE_THRESHOLD
@@ -187,12 +198,12 @@ function damage.applyCollision(dmg1, car1, dmg2, car2, impactSpeed)
 
     -- Set collision event data (used by audio / visuals)
     dmg1.newImpact   = true
-    dmg1.impactFlash = math.max(dmg1.impactFlash, 0.4)
+    dmg1.impactFlash = max(dmg1.impactFlash, 0.4)
     dmg1.impactSide  = side1
     dmg1.impactForce = force
 
     dmg2.newImpact   = true
-    dmg2.impactFlash = math.max(dmg2.impactFlash, 0.4)
+    dmg2.impactFlash = max(dmg2.impactFlash, 0.4)
     dmg2.impactSide  = side2
     dmg2.impactForce = force
 end

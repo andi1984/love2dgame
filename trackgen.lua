@@ -2,6 +2,9 @@
 -- Generates realistic racing circuits from a seed value
 
 local trackgen = {}
+local floor, sqrt, abs, min, max = math.floor, math.sqrt, math.abs, math.min, math.max
+local cos, sin, atan2 = math.cos, math.sin, math.atan2
+local huge, pi = math.huge, math.pi
 
 -- ============================================================
 -- SEEDED PRNG (Multiplicative congruential, Lua 5.1 / LuaJIT safe)
@@ -21,7 +24,7 @@ local function makeRng(seed)
     end
     -- Return integer in [lo, hi]
     function rng:int(lo, hi)
-        return math.floor(self:range(lo, hi + 0.999))
+        return floor(self:range(lo, hi + 0.999))
     end
     -- Pick random element from array
     function rng:pick(arr)
@@ -43,27 +46,15 @@ local function segmentsIntersect(p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y)
     local d1x, d1y = p2x - p1x, p2y - p1y
     local d2x, d2y = p4x - p3x, p4y - p3y
     local cross = d1x * d2y - d1y * d2x
-    if math.abs(cross) < 1e-10 then return false end
+    if abs(cross) < 1e-10 then return false end
     local dx, dy = p3x - p1x, p3y - p1y
     local t = (dx * d2y - dy * d2x) / cross
     local u = (dx * d1y - dy * d1x) / cross
     return t > 0 and t < 1 and u > 0 and u < 1
 end
 
--- Catmull-Rom spline interpolation (same as track.lua)
-local function catmullRom(p0, p1, p2, p3, t)
-    local t2 = t * t
-    local t3 = t2 * t
-    local x = 0.5 * ((2 * p1.x) +
-        (-p0.x + p2.x) * t +
-        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3)
-    local y = 0.5 * ((2 * p1.y) +
-        (-p0.y + p2.y) * t +
-        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
-    return {x = x, y = y}
-end
+local spline = require("spline")
+local catmullRom = spline.catmullRom
 
 -- Generate a spline path from control points (low or high resolution)
 local function generateSpline(points, segsPerCurve)
@@ -97,7 +88,7 @@ function trackgen.validatePoints(points, width)
         local prev = path[((idx - 2) % n) + 1]
         local nextPt = path[(idx % n) + 1]
         local dx, dy = nextPt.x - prev.x, nextPt.y - prev.y
-        local len = math.sqrt(dx * dx + dy * dy)
+        local len = sqrt(dx * dx + dy * dy)
         if len < 1e-8 then return 0, -1 end
         return -dy / len, dx / len
     end
@@ -109,7 +100,7 @@ function trackgen.validatePoints(points, width)
         for j = i + skip, n do
             local j2 = (j % n) + 1
             -- Also skip if j2 wraps to near i
-            local wrapDist = math.min(math.abs(j2 - i), n - math.abs(j2 - i))
+            local wrapDist = min(abs(j2 - i), n - abs(j2 - i))
             if wrapDist >= skip then
                 if segmentsIntersect(
                     path[i].x, path[i].y, path[i2].x, path[i2].y,
@@ -132,7 +123,7 @@ function trackgen.validatePoints(points, width)
         local i2 = (i % n) + 1
         for j = i + skip, n do
             local j2 = (j % n) + 1
-            local wrapDist = math.min(math.abs(j2 - i), n - math.abs(j2 - i))
+            local wrapDist = min(abs(j2 - i), n - abs(j2 - i))
             if wrapDist >= skip then
                 if segmentsIntersect(
                     outer[i].x, outer[i].y, outer[i2].x, outer[i2].y,
@@ -192,8 +183,8 @@ local function generateSurfaceZones(rng, curvatures)
         local avgCurv = 0
         local samples = 0
         if curvatures then
-            local startIdx = math.max(1, math.floor(startPct * #curvatures))
-            local endIdx = math.min(#curvatures, math.floor(endPct * #curvatures))
+            local startIdx = max(1, floor(startPct * #curvatures))
+            local endIdx = min(#curvatures, floor(endPct * #curvatures))
             for j = startIdx, endIdx do
                 avgCurv = avgCurv + (curvatures[j] or 0)
                 samples = samples + 1
@@ -257,13 +248,13 @@ local function computeCurvatures(path)
         local nextPt = path[(i % n) + 1]
         local dx1, dy1 = curr.x - prev.x, curr.y - prev.y
         local dx2, dy2 = nextPt.x - curr.x, nextPt.y - curr.y
-        local a1 = math.atan2(dy1, dx1)
-        local a2 = math.atan2(dy2, dx2)
+        local a1 = atan2(dy1, dx1)
+        local a2 = atan2(dy2, dx2)
         local diff = a2 - a1
         -- Normalize to [-pi, pi]
-        while diff > math.pi do diff = diff - 2 * math.pi end
-        while diff < -math.pi do diff = diff + 2 * math.pi end
-        curvatures[i] = math.abs(diff)
+        while diff > pi do diff = diff - 2 * pi end
+        while diff < -pi do diff = diff + 2 * pi end
+        curvatures[i] = abs(diff)
     end
     return curvatures
 end
@@ -279,8 +270,9 @@ local STYLE_DESCRIPTIONS = {
     flowing = "Smooth flowing layout",
 }
 
-function trackgen.generate(seed)
+function trackgen.generate(seed, attempt)
     seed = seed or os.time()
+    attempt = attempt or 1
     local rng = makeRng(seed)
 
     -- 1b. Choose meta-parameters
@@ -296,8 +288,8 @@ function trackgen.generate(seed)
     local anchors = {}
     local angles = {}
     for i = 1, numAnchors do
-        local baseAngle = (i - 1) / numAnchors * 2 * math.pi
-        local jitter = rng:range(-0.3, 0.3) / numAnchors * 2 * math.pi
+        local baseAngle = (i - 1) / numAnchors * 2 * pi
+        local jitter = rng:range(-0.3, 0.3) / numAnchors * 2 * pi
         angles[i] = baseAngle + jitter
     end
     -- Sort angles to maintain consistent winding
@@ -309,8 +301,8 @@ function trackgen.generate(seed)
         local rx = baseRadiusX * radiusMult
         local ry = baseRadiusY * radiusMult
         anchors[i] = {
-            x = math.cos(angle) * rx,
-            y = math.sin(angle) * ry,
+            x = cos(angle) * rx,
+            y = sin(angle) * ry,
         }
     end
 
@@ -320,7 +312,7 @@ function trackgen.generate(seed)
     elseif style == "technical" then maxFeatures = rng:int(2, 4)
     else maxFeatures = rng:int(1, 2) end
 
-    maxFeatures = math.min(maxFeatures, math.floor(numAnchors / 3))
+    maxFeatures = min(maxFeatures, floor(numAnchors / 3))
 
     local featureSegments = {} -- set of indices where features are injected
     local points = {}
@@ -342,7 +334,7 @@ function trackgen.generate(seed)
         -- Check no adjacent feature
         local adjacent = false
         for seg in pairs(featureSegments) do
-            if math.abs(seg - idx) <= 1 then adjacent = true; break end
+            if abs(seg - idx) <= 1 then adjacent = true; break end
         end
         if not adjacent then
             featureSegments[idx] = true
@@ -361,7 +353,7 @@ function trackgen.generate(seed)
             local mx, my = (ax + bx) / 2, (ay + by) / 2
             -- Perpendicular direction
             local dx, dy = bx - ax, by - ay
-            local len = math.sqrt(dx * dx + dy * dy)
+            local len = sqrt(dx * dx + dy * dy)
             if len < 1e-6 then len = 1 end
             local nx, ny = -dy / len, dx / len
 
@@ -395,7 +387,7 @@ function trackgen.generate(seed)
 
     -- 1e. Fit to viewport (800x600 with margin)
     local margin = baseWidth / 2 + 25
-    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    local minX, maxX, minY, maxY = huge, -huge, huge, -huge
     for _, p in ipairs(points) do
         if p.x < minX then minX = p.x end
         if p.x > maxX then maxX = p.x end
@@ -410,7 +402,7 @@ function trackgen.generate(seed)
 
     local scaleX = (800 - 2 * margin) / rangeX
     local scaleY = (600 - 2 * margin) / rangeY
-    local scale = math.min(scaleX, scaleY)
+    local scale = min(scaleX, scaleY)
 
     local cx = (minX + maxX) / 2
     local cy = (minY + maxY) / 2
@@ -423,8 +415,8 @@ function trackgen.generate(seed)
     -- 1f. Self-intersection validation
     if not trackgen.validatePoints(points, baseWidth) then
         -- Retry with next seed (up to 5 attempts)
-        if seed < (seed + 5) then
-            return trackgen.generate(seed + 1)
+        if attempt < 5 then
+            return trackgen.generate(seed + 1, attempt + 1)
         end
     end
 
@@ -434,7 +426,7 @@ function trackgen.generate(seed)
     local nextP = points[2]
     local tdx = nextP.x - prevP.x
     local tdy = nextP.y - prevP.y
-    local startAngle = math.atan2(tdy, tdx)
+    local startAngle = atan2(tdy, tdx)
 
     -- 1h. Compute curvatures for surface zone generation
     local splinePath = generateSpline(points, 10)
@@ -456,7 +448,7 @@ function trackgen.generate(seed)
         id = id,
         name = name,
         description = description,
-        width = math.floor(baseWidth),
+        width = floor(baseWidth),
         points = points,
         startAngle = startAngle,
         surfaceZones = surfaceZones,

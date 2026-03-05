@@ -3,25 +3,27 @@
 -- Pure logic – no Love2D dependency
 
 local collision = {}
+local cos, sin, abs, min, max = math.cos, math.sin, math.abs, math.min, math.max
+local huge = math.huge
 
--- Return the 4 corners of a car's oriented bounding box
-local function getCorners(car)
+-- Return the 4 corners of a car's OBB plus the two unit axes (forward, right)
+local function getCornersAndAxes(car)
     local hw  = car.width  / 2
     local hh  = car.height / 2
-    local cos = math.cos(car.angle)
-    local sin = math.sin(car.angle)
-    -- front-right, front-left, rear-left, rear-right (local frame)
-    return {
-        { x = car.x + cos * hw - sin * hh,  y = car.y + sin * hw + cos * hh  },
-        { x = car.x + cos * hw + sin * hh,  y = car.y + sin * hw - cos * hh  },
-        { x = car.x - cos * hw + sin * hh,  y = car.y - sin * hw - cos * hh  },
-        { x = car.x - cos * hw - sin * hh,  y = car.y - sin * hw + cos * hh  },
+    local ca  = cos(car.angle)
+    local sa  = sin(car.angle)
+    local corners = {
+        { x = car.x + ca * hw - sa * hh,  y = car.y + sa * hw + ca * hh  },
+        { x = car.x + ca * hw + sa * hh,  y = car.y + sa * hw - ca * hh  },
+        { x = car.x - ca * hw + sa * hh,  y = car.y - sa * hw - ca * hh  },
+        { x = car.x - ca * hw - sa * hh,  y = car.y - sa * hw + ca * hh  },
     }
+    return corners, ca, sa
 end
 
 -- Project corners onto axis, return min/max extents
 local function project(corners, ax, ay)
-    local mn, mx = math.huge, -math.huge
+    local mn, mx = huge, -huge
     for _, c in ipairs(corners) do
         local d = c.x * ax + c.y * ay
         if d < mn then mn = d end
@@ -32,16 +34,16 @@ end
 
 -- SAT overlap test; returns (overlap, axis) or nil on no collision
 local function satTest(c1, c2)
-    local corners1 = getCorners(c1)
-    local corners2 = getCorners(c2)
-    -- Two axes from each rectangle's orientation
+    local corners1, ca1, sa1 = getCornersAndAxes(c1)
+    local corners2, ca2, sa2 = getCornersAndAxes(c2)
+    -- Two axes from each rectangle's orientation (reuse cos/sin from corners)
     local axes = {
-        { x =  math.cos(c1.angle), y =  math.sin(c1.angle) },
-        { x = -math.sin(c1.angle), y =  math.cos(c1.angle) },
-        { x =  math.cos(c2.angle), y =  math.sin(c2.angle) },
-        { x = -math.sin(c2.angle), y =  math.cos(c2.angle) },
+        { x =  ca1, y =  sa1 },
+        { x = -sa1, y =  ca1 },
+        { x =  ca2, y =  sa2 },
+        { x = -sa2, y =  ca2 },
     }
-    local minOverlap = math.huge
+    local minOverlap = huge
     local minAxis    = nil
     for _, axis in ipairs(axes) do
         local mn1, mx1 = project(corners1, axis.x, axis.y)
@@ -49,7 +51,7 @@ local function satTest(c1, c2)
         if mn1 > mx2 or mn2 > mx1 then
             return nil  -- separating axis found → no collision
         end
-        local ov = math.min(mx1, mx2) - math.max(mn1, mn2)
+        local ov = min(mx1, mx2) - max(mn1, mn2)
         if ov < minOverlap then
             minOverlap = ov
             minAxis    = axis
@@ -117,14 +119,14 @@ function collision.resolve(event)
     c2.y = c2.y + ay * push
 
     -- World-space velocity vectors
-    local v1x = math.cos(c1.angle) * c1.speed
-    local v1y = math.sin(c1.angle) * c1.speed
-    local v2x = math.cos(c2.angle) * c2.speed
-    local v2y = math.sin(c2.angle) * c2.speed
+    local v1x = cos(c1.angle) * c1.speed
+    local v1y = sin(c1.angle) * c1.speed
+    local v2x = cos(c2.angle) * c2.speed
+    local v2y = sin(c2.angle) * c2.speed
 
     -- Relative velocity along the collision normal
     local relVel = (v1x - v2x) * ax + (v1y - v2y) * ay
-    local impactSpeed = math.abs(relVel)
+    local impactSpeed = abs(relVel)
 
     if relVel > 0 then
         -- Impulse exchange (equal mass approximation, coefficient of restitution)
@@ -132,14 +134,14 @@ function collision.resolve(event)
         local impulse = (1 + e) * relVel / 2
 
         -- Project impulse onto each car's heading
-        local dot1 = ax * math.cos(c1.angle) + ay * math.sin(c1.angle)
-        local dot2 = ax * math.cos(c2.angle) + ay * math.sin(c2.angle)
+        local dot1 = ax * cos(c1.angle) + ay * sin(c1.angle)
+        local dot2 = ax * cos(c2.angle) + ay * sin(c2.angle)
         c1.speed = c1.speed - dot1 * impulse
         c2.speed = c2.speed + dot2 * impulse
 
         -- Small angular deflection for realism (off-axis hits spin the car)
         local cross   = ax * dy - ay * dx
-        local deflect = math.max(-0.18, math.min(0.18, cross * 0.007))
+        local deflect = max(-0.18, min(0.18, cross * 0.007))
         c1.angle = c1.angle + deflect * 0.3
         c2.angle = c2.angle - deflect * 0.3
     end

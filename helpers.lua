@@ -1,27 +1,26 @@
 -- Drawing utility functions (requires Love2D)
 
 local helpers = {}
+local cos, sin, pi = math.cos, math.sin, math.pi
+
+local SEGMENTS = 64
+
+local function buildEllipseVertices(cx, cy, rx, ry)
+    local vertices = {}
+    for i = 0, SEGMENTS - 1 do
+        local angle = (i / SEGMENTS) * pi * 2
+        vertices[#vertices + 1] = cx + cos(angle) * rx
+        vertices[#vertices + 1] = cy + sin(angle) * ry
+    end
+    return vertices
+end
 
 function helpers.drawFilledEllipse(cx, cy, rx, ry)
-    local segments = 64
-    local vertices = {}
-    for i = 0, segments - 1 do
-        local angle = (i / segments) * math.pi * 2
-        table.insert(vertices, cx + math.cos(angle) * rx)
-        table.insert(vertices, cy + math.sin(angle) * ry)
-    end
-    love.graphics.polygon("fill", vertices)
+    love.graphics.polygon("fill", buildEllipseVertices(cx, cy, rx, ry))
 end
 
 function helpers.drawEllipseOutline(cx, cy, rx, ry)
-    local segments = 64
-    local vertices = {}
-    for i = 0, segments - 1 do
-        local angle = (i / segments) * math.pi * 2
-        table.insert(vertices, cx + math.cos(angle) * rx)
-        table.insert(vertices, cy + math.sin(angle) * ry)
-    end
-    love.graphics.polygon("line", vertices)
+    love.graphics.polygon("line", buildEllipseVertices(cx, cy, rx, ry))
 end
 
 return helpers

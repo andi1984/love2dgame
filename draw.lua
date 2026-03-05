@@ -2,9 +2,35 @@
 
 local draw = {}
 local fonts = {}
+local floor, ceil, min, max, abs = math.floor, math.ceil, math.min, math.max, math.abs
+local cos, sin, random, pi = math.cos, math.sin, math.random, math.pi
 local grassCanvas
 local trackCanvas
 local currentTrackId = nil
+
+-- Module-level constants (avoid per-frame allocations)
+local POLE_COLOR = {0.5, 0.5, 0.5, 1}
+
+local function healthColor(h)
+    if h > 0.60 then return 0.2, 0.9, 0.2
+    elseif h > 0.25 then return 0.95, 0.75, 0.1
+    else return 0.95, 0.2, 0.1 end
+end
+
+local TIRE_LAYOUT = {
+    { key="FL", label="FL", col=0, row=0 },
+    { key="FR", label="FR", col=1, row=0 },
+    { key="RL", label="RL", col=0, row=1 },
+    { key="RR", label="RR", col=1, row=1 },
+}
+
+-- Pre-allocated tire order table (overwritten per car in draw.car)
+local _tireOrder = {
+    { 0, 0, "FL" },
+    { 0, 0, "FR" },
+    { 0, 0, "RL" },
+    { 0, 0, "RR" },
+}
 
 function draw.init(track)
     fonts.hud = love.graphics.newFont(14)
@@ -34,20 +60,20 @@ function draw.generateGrassCanvas()
     love.graphics.clear(0.18, 0.55, 0.13, 1)
     math.randomseed(42)
     for _ = 1, 4000 do
-        local x = math.random(0, 800)
-        local y = math.random(0, 600)
-        local shade = 0.14 + math.random() * 0.12
-        local g = 0.45 + math.random() * 0.25
+        local x = random(0, 800)
+        local y = random(0, 600)
+        local shade = 0.14 + random() * 0.12
+        local g = 0.45 + random() * 0.25
         love.graphics.setColor(shade, g, shade * 0.7, 0.6)
         love.graphics.rectangle("fill", x, y, 2, 2)
     end
     for _ = 1, 1500 do
-        local x = math.random(0, 800)
-        local y = math.random(0, 600)
-        local shade = 0.1 + math.random() * 0.15
-        local g = 0.5 + math.random() * 0.2
+        local x = random(0, 800)
+        local y = random(0, 600)
+        local shade = 0.1 + random() * 0.15
+        local g = 0.5 + random() * 0.2
         love.graphics.setColor(shade, g, shade * 0.6, 0.4)
-        love.graphics.rectangle("fill", x, y, 1, 3 + math.random(0, 2))
+        love.graphics.rectangle("fill", x, y, 1, 3 + random(0, 2))
     end
     love.graphics.setCanvas()
     math.randomseed(os.time())
@@ -93,16 +119,16 @@ function draw.generateTrackCanvas(track)
         -- Add texture
         math.randomseed(123)
         for _ = 1, 6000 do
-            local x = math.random(0, 800)
-            local y = math.random(0, 600)
-            local v = 0.2 + math.random() * 0.15
+            local x = random(0, 800)
+            local y = random(0, 600)
+            local v = 0.2 + random() * 0.15
             love.graphics.setColor(v, v, v + 0.02, 0.3)
             love.graphics.rectangle("fill", x, y, 1, 1)
         end
         for _ = 1, 800 do
-            local x = math.random(0, 800)
-            local y = math.random(0, 600)
-            local v = 0.3 + math.random() * 0.1
+            local x = random(0, 800)
+            local y = random(0, 600)
+            local v = 0.3 + random() * 0.1
             love.graphics.setColor(v, v, v, 0.15)
             love.graphics.rectangle("fill", x, y, 2, 2)
         end
@@ -204,7 +230,7 @@ function draw.curbs(track)
             end
             love.graphics.push()
             love.graphics.translate(c.x, c.y)
-            love.graphics.rotate(c.angle + math.pi / 2)
+            love.graphics.rotate(c.angle + pi / 2)
             love.graphics.rectangle("fill", -curbW / 2, -curbH / 2, curbW, curbH)
             love.graphics.pop()
         end
@@ -219,7 +245,7 @@ function draw.curbs(track)
             end
             love.graphics.push()
             love.graphics.translate(c.x, c.y)
-            love.graphics.rotate(c.angle + math.pi / 2)
+            love.graphics.rotate(c.angle + pi / 2)
             love.graphics.rectangle("fill", -curbW / 2, -curbH / 2, curbW, curbH)
             love.graphics.pop()
         end
@@ -255,15 +281,15 @@ function draw.finishLine(track)
 
     -- Handle both horizontal and vertical finish lines based on track angle
     local angle = track.finishAngle or 0
-    local isVertical = math.abs(math.cos(angle)) > math.abs(math.sin(angle))
+    local isVertical = abs(cos(angle)) > abs(sin(angle))
 
     local gridSize = 6
     local cols = 2
     local totalWidth = cols * gridSize
 
     if isVertical then
-        local numRows = math.floor(math.abs(y2 - y1) / gridSize)
-        local minY = math.min(y1, y2)
+        local numRows = floor(abs(y2 - y1) / gridSize)
+        local minY = min(y1, y2)
         for row = 0, numRows - 1 do
             for col = 0, cols - 1 do
                 if (row + col) % 2 == 0 then
@@ -280,10 +306,10 @@ function draw.finishLine(track)
     else
         love.graphics.push()
         love.graphics.translate(lineX, (y1 + y2) / 2)
-        love.graphics.rotate(angle + math.pi / 2)
+        love.graphics.rotate(angle + pi / 2)
 
-        local halfLen = math.abs(y2 - y1) / 2
-        local numRows = math.floor(halfLen * 2 / gridSize)
+        local halfLen = abs(y2 - y1) / 2
+        local numRows = floor(halfLen * 2 / gridSize)
 
         for row = 0, numRows - 1 do
             for col = 0, cols - 1 do
@@ -302,12 +328,12 @@ function draw.finishLine(track)
     end
 
     -- Draw flags at finish line ends
-    local poleColor = {0.5, 0.5, 0.5, 1}
+    local poleColor = POLE_COLOR
     local poleHeight = 20
     local flagSize = 8
 
     love.graphics.setColor(poleColor)
-    love.graphics.rectangle("fill", lineX - 1, math.min(y1, y2) - poleHeight, 2, poleHeight)
+    love.graphics.rectangle("fill", lineX - 1, min(y1, y2) - poleHeight, 2, poleHeight)
     for fr = 0, 1 do
         for fc = 0, 1 do
             if (fr + fc) % 2 == 0 then
@@ -317,13 +343,13 @@ function draw.finishLine(track)
             end
             love.graphics.rectangle("fill",
                 lineX + 1 + fc * (flagSize / 2),
-                math.min(y1, y2) - poleHeight + fr * (flagSize / 2),
+                min(y1, y2) - poleHeight + fr * (flagSize / 2),
                 flagSize / 2, flagSize / 2)
         end
     end
 
     love.graphics.setColor(poleColor)
-    love.graphics.rectangle("fill", lineX - 1, math.max(y1, y2), 2, poleHeight)
+    love.graphics.rectangle("fill", lineX - 1, max(y1, y2), 2, poleHeight)
     for fr = 0, 1 do
         for fc = 0, 1 do
             if (fr + fc) % 2 == 0 then
@@ -333,7 +359,7 @@ function draw.finishLine(track)
             end
             love.graphics.rectangle("fill",
                 lineX + 1 + fc * (flagSize / 2),
-                math.max(y1, y2) + fr * (flagSize / 2),
+                max(y1, y2) + fr * (flagSize / 2),
                 flagSize / 2, flagSize / 2)
         end
     end
@@ -383,14 +409,13 @@ function draw.car(car)
 
     -- Wheels — flat tires look squashed / darkened
     local wheelW, wheelH = 6, 3
-    local tireOrder = {
-        -- { xMult, ySign, tireKey }
-        { w * 0.25,  -h / 2, "FL" },
-        { w * 0.25,   h / 2, "FR" },
-        { -w * 0.3, -h / 2, "RL" },
-        { -w * 0.3,  h / 2, "RR" },
-    }
-    for _, tw in ipairs(tireOrder) do
+    local frontX, rearX = w * 0.25, -w * 0.3
+    local halfH = h / 2
+    _tireOrder[1][1] = frontX;  _tireOrder[1][2] = -halfH
+    _tireOrder[2][1] = frontX;  _tireOrder[2][2] =  halfH
+    _tireOrder[3][1] = rearX;   _tireOrder[3][2] = -halfH
+    _tireOrder[4][1] = rearX;   _tireOrder[4][2] =  halfH
+    for _, tw in ipairs(_tireOrder) do
         local tx, ty, key = tw[1], tw[2], tw[3]
         local health = dmg and dmg.tires[key] or 1.0
         local isFlat = dmg and dmg.flatTires[key]
@@ -398,7 +423,7 @@ function draw.car(car)
             -- Flat tire: wider, flatter, brighter rim visible
             love.graphics.setColor(0.35, 0.30, 0.20, 1)  -- dusty brownish rim
             love.graphics.rectangle("fill", tx - wheelW / 2 - 1, ty - wheelH / 2,
-                                    wheelW + 2, math.max(1, wheelH - 1))
+                                    wheelW + 2, max(1, wheelH - 1))
         else
             -- Healthy tires range from black (perfect) to worn grey
             local shade = 0.1 + (1 - health) * 0.25
@@ -424,9 +449,9 @@ function draw.car(car)
 
     -- Highlight stripe
     love.graphics.setColor(
-        math.min(1, bodyR + 0.15),
-        math.min(1, bodyG + 0.10),
-        math.min(1, bodyB + 0.05),
+        min(1, bodyR + 0.15),
+        min(1, bodyG + 0.10),
+        min(1, bodyB + 0.05),
         0.4)
     love.graphics.rectangle("fill", -w/2 + 3, -1, w - 6, 2, 1, 1)
 
@@ -510,18 +535,18 @@ function draw.hud(car, game, track)
     local barH = 10
     love.graphics.setColor(1, 1, 1, 0.15)
     love.graphics.rectangle("fill", barX, speedY + 3, barW, barH, 2, 2)
-    local speedPct = math.min(1, math.abs(car.speed) / car.physics.maxSpeed)
+    local speedPct = min(1, abs(car.speed) / car.physics.maxSpeed)
     local r = speedPct
     local g = 1 - speedPct * 0.7
     love.graphics.setColor(r, g, 0.1, 0.85)
     love.graphics.rectangle("fill", barX, speedY + 3, barW * speedPct, barH, 2, 2)
     love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.print(tostring(math.floor(math.abs(car.speed))), barX + barW + 5, speedY)
+    love.graphics.print(tostring(floor(abs(car.speed))), barX + barW + 5, speedY)
 
     -- Timer
     local timerY = speedY + 22
     love.graphics.setColor(1, 1, 1, 0.9)
-    local mins = math.floor(game.timer / 60)
+    local mins = floor(game.timer / 60)
     local secs = game.timer % 60
     love.graphics.print(string.format("TIME  %d:%05.2f", mins, secs), x0, timerY)
 
@@ -549,7 +574,7 @@ function draw.hud(car, game, track)
     local tireY = fuelY + 18
     love.graphics.setColor(1, 1, 1, 0.9)
     love.graphics.print("TIRE", x0, tireY)
-    local pressureDev = math.abs(car.physics.tirePressure - car.physics.optimalPressure)
+    local pressureDev = abs(car.physics.tirePressure - car.physics.optimalPressure)
     if pressureDev < 0.2 then
         love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
     elseif pressureDev < 0.5 then
@@ -578,26 +603,13 @@ function draw.hud(car, game, track)
         love.graphics.setColor(1, 0.75, 0.2, 0.9)
         love.graphics.print("DAMAGE", x0, dmgY)
 
-        -- Helper: color by health
-        local function healthColor(h)
-            if h > 0.60 then return 0.2, 0.9, 0.2
-            elseif h > 0.25 then return 0.95, 0.75, 0.1
-            else return 0.95, 0.2, 0.1 end
-        end
-
         -- Tire grid: FL FR / RL RR
         local dmgTireY = dmgY + 14
         local tireX = x0 + 35
         local spacing = 18
-        local tireLayout = {
-            { key="FL", label="FL", col=0, row=0 },
-            { key="FR", label="FR", col=1, row=0 },
-            { key="RL", label="RL", col=0, row=1 },
-            { key="RR", label="RR", col=1, row=1 },
-        }
         love.graphics.setColor(1, 1, 1, 0.55)
         love.graphics.print("TIRES", x0, dmgTireY - 1)
-        for _, t in ipairs(tireLayout) do
+        for _, t in ipairs(TIRE_LAYOUT) do
             local cx = tireX + t.col * spacing * 2
             local cy = dmgTireY + t.row * spacing
             local h  = dmg.tires[t.key]
@@ -641,7 +653,7 @@ function draw.hud(car, game, track)
     -- Lap position
     love.graphics.setFont(fonts.hudBig)
     love.graphics.setColor(1, 1, 1, 0.7)
-    love.graphics.printf(string.format("%d/%d", math.min(laps + 1, game.maxLaps), game.maxLaps),
+    love.graphics.printf(string.format("%d/%d", min(laps + 1, game.maxLaps), game.maxLaps),
         panelX, panelY + panelH - 24, panelW - 10, "right")
 end
 
@@ -706,7 +718,7 @@ function draw.countdown(game)
     love.graphics.setColor(0, 0, 0, 0.4)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
 
-    local num = math.ceil(game.countdown)
+    local num = ceil(game.countdown)
     if num < 1 then num = 0 end
 
     local text
@@ -725,7 +737,7 @@ function draw.countdown(game)
         r, g, b = 0.1, 1, 0.2
     end
 
-    local frac = game.countdown - math.floor(game.countdown)
+    local frac = game.countdown - floor(game.countdown)
     local scale
     if frac > 0.7 then
         scale = 1 + (frac - 0.7) * 2.5
@@ -755,7 +767,7 @@ function draw.winScreen(game, cars, track)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
 
     local checkSize = 16
-    local cols = math.ceil(800 / checkSize)
+    local cols = ceil(800 / checkSize)
     for i = 0, cols - 1 do
         for row = 0, 1 do
             if (i + row) % 2 == 0 then
@@ -794,7 +806,7 @@ function draw.winScreen(game, cars, track)
 
     love.graphics.setFont(fonts.winSub)
     love.graphics.setColor(1, 1, 1, 0.95)
-    local mins = math.floor(game.timer / 60)
+    local mins = floor(game.timer / 60)
     local secs = game.timer % 60
     local timeStr = string.format("Time: %d:%05.2f", mins, secs)
     local timeTW = fonts.winSub:getWidth(timeStr)
@@ -805,7 +817,7 @@ function draw.winScreen(game, cars, track)
         local circumference = track.getCircumference and track.getCircumference() or 1500
         avgSpeed = (game.maxLaps * circumference) / game.timer
     end
-    local avgStr = string.format("Avg Speed: %d", math.floor(avgSpeed))
+    local avgStr = string.format("Avg Speed: %d", floor(avgSpeed))
     local avgTW = fonts.winSub:getWidth(avgStr)
     love.graphics.print(avgStr, 400 - avgTW / 2, 305)
 
@@ -825,8 +837,8 @@ function draw.surfaceZones(track)
         if zone.color and zone.color[4] > 0 then
             love.graphics.setColor(zone.color[1], zone.color[2], zone.color[3], zone.color[4])
 
-            local startIdx = math.floor(zone.startPct * pathLen) + 1
-            local endIdx = math.floor(zone.endPct * pathLen)
+            local startIdx = floor(zone.startPct * pathLen) + 1
+            local endIdx = floor(zone.endPct * pathLen)
 
             for i = startIdx, endIdx do
                 if track.innerPath[i] and track.outerPath[i] then
@@ -886,7 +898,7 @@ function draw.devMenu(devmenu)
         elseif s.max - s.min < 10 then
             valStr = string.format("%.1f", val)
         else
-            valStr = string.format("%d", math.floor(val))
+            valStr = string.format("%d", floor(val))
         end
         love.graphics.setColor(1, 1, 1, 0.6)
         love.graphics.print(valStr .. " " .. s.unit, sx + sw + 4, sy + 1)
@@ -938,7 +950,7 @@ function draw.mainMenu(menu)
 
     for i, trackInfo in ipairs(trackList) do
         local col = (i - 1) % cols
-        local row = math.floor((i - 1) / cols)
+        local row = floor((i - 1) / cols)
         local cardX = startX + col * (cardW + padding)
         local cardY = startY + row * (cardH + padding)
 
@@ -981,7 +993,7 @@ function draw.mainMenu(menu)
     do
         local addIdx = #trackList + 1
         local col = (addIdx - 1) % cols
-        local row = math.floor((addIdx - 1) / cols)
+        local row = floor((addIdx - 1) / cols)
         local cardX = startX + col * (cardW + padding)
         local cardY = startY + row * (cardH + padding)
 
@@ -1069,17 +1081,17 @@ function draw.miniTrackPreview(trackInfo, cx, cy, scaleX, scaleY)
     -- Find bounds
     local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
     for _, p in ipairs(points) do
-        minX = math.min(minX, p.x)
-        maxX = math.max(maxX, p.x)
-        minY = math.min(minY, p.y)
-        maxY = math.max(maxY, p.y)
+        minX = min(minX, p.x)
+        maxX = max(maxX, p.x)
+        minY = min(minY, p.y)
+        maxY = max(maxY, p.y)
     end
 
     local rangeX = maxX - minX
     local rangeY = maxY - minY
 
     -- Scale to fit preview area
-    local scale = math.min(scaleX * 2 / rangeX, scaleY * 2 / rangeY) * 0.8
+    local scale = min(scaleX * 2 / rangeX, scaleY * 2 / rangeY) * 0.8
 
     -- Draw track outline
     love.graphics.setColor(0.5, 0.5, 0.55, 0.8)
