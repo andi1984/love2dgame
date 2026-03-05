@@ -87,10 +87,10 @@ end
 local function getTangent(path, index)
     local n = #path
     local prev = path[((index - 2) % n) + 1]
-    local next = path[(index % n) + 1]
-    
-    local dx = next.x - prev.x
-    local dy = next.y - prev.y
+    local nextPt = path[(index % n) + 1]
+
+    local dx = nextPt.x - prev.x
+    local dy = nextPt.y - prev.y
     local len = math.sqrt(dx * dx + dy * dy)
     
     if len > 0 then

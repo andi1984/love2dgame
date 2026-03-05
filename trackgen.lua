@@ -34,11 +34,6 @@ end
 -- GEOMETRY HELPERS
 -- ============================================================
 
-local function dist(ax, ay, bx, by)
-    local dx, dy = bx - ax, by - ay
-    return math.sqrt(dx * dx + dy * dy)
-end
-
 local function lerp(a, b, t)
     return a + (b - a) * t
 end
@@ -100,8 +95,8 @@ function trackgen.validatePoints(points, width)
     -- Build offset paths (inner/outer) for width-aware check
     local function getNormal(idx)
         local prev = path[((idx - 2) % n) + 1]
-        local next = path[(idx % n) + 1]
-        local dx, dy = next.x - prev.x, next.y - prev.y
+        local nextPt = path[(idx % n) + 1]
+        local dx, dy = nextPt.x - prev.x, nextPt.y - prev.y
         local len = math.sqrt(dx * dx + dy * dy)
         if len < 1e-8 then return 0, -1 end
         return -dy / len, dx / len
@@ -259,9 +254,9 @@ local function computeCurvatures(path)
     for i = 1, n do
         local prev = path[((i - 2) % n) + 1]
         local curr = path[i]
-        local next = path[(i % n) + 1]
+        local nextPt = path[(i % n) + 1]
         local dx1, dy1 = curr.x - prev.x, curr.y - prev.y
-        local dx2, dy2 = next.x - curr.x, next.y - curr.y
+        local dx2, dy2 = nextPt.x - curr.x, nextPt.y - curr.y
         local a1 = math.atan2(dy1, dx1)
         local a2 = math.atan2(dy2, dx2)
         local diff = a2 - a1

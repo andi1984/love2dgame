@@ -586,7 +586,7 @@ function draw.hud(car, game, track)
         end
 
         -- Tire grid: FL FR / RL RR
-        local tireY = dmgY + 14
+        local dmgTireY = dmgY + 14
         local tireX = x0 + 35
         local spacing = 18
         local tireLayout = {
@@ -596,10 +596,10 @@ function draw.hud(car, game, track)
             { key="RR", label="RR", col=1, row=1 },
         }
         love.graphics.setColor(1, 1, 1, 0.55)
-        love.graphics.print("TIRES", x0, tireY - 1)
+        love.graphics.print("TIRES", x0, dmgTireY - 1)
         for _, t in ipairs(tireLayout) do
             local cx = tireX + t.col * spacing * 2
-            local cy = tireY + t.row * spacing
+            local cy = dmgTireY + t.row * spacing
             local h  = dmg.tires[t.key]
             local r, g, b = healthColor(h)
             -- Circle for tire
@@ -617,7 +617,7 @@ function draw.hud(car, game, track)
         end
 
         -- Engine health bar
-        local engY = tireY + spacing * 2 + 8
+        local engY = dmgTireY + spacing * 2 + 8
         love.graphics.setColor(1, 1, 1, 0.55)
         love.graphics.print("ENG", x0, engY)
         local er, eg, eb = healthColor(dmg.engine)

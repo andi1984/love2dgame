@@ -62,9 +62,9 @@ local function signedDistToCenter(car, track)
     -- Determine side using cross product with track tangent
     local n = #track.centerPath
     local prev = track.centerPath[((bestIdx - 2) % n) + 1]
-    local next = track.centerPath[(bestIdx % n) + 1]
-    local tx = next.x - prev.x
-    local ty = next.y - prev.y
+    local nextPt = track.centerPath[(bestIdx % n) + 1]
+    local tx = nextPt.x - prev.x
+    local ty = nextPt.y - prev.y
     local dx = car.x - track.centerPath[bestIdx].x
     local dy = car.y - track.centerPath[bestIdx].y
     local cross = tx * dy - ty * dx

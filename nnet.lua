@@ -47,7 +47,7 @@ end
 function nnet.forward(net, inputs)
     local current = inputs
     for li, layer in ipairs(net.layers) do
-        local next = {}
+        local outputs = {}
         local isOutput = (li == #net.layers)
         for o = 1, layer.outputSize do
             local sum = layer.biases[o]
@@ -56,13 +56,13 @@ function nnet.forward(net, inputs)
             end
             if isOutput then
                 -- Sigmoid for output layer: map to [0, 1]
-                next[o] = 1.0 / (1.0 + math.exp(-sum))
+                outputs[o] = 1.0 / (1.0 + math.exp(-sum))
             else
                 -- Tanh for hidden layers
-                next[o] = math.tanh(sum)
+                outputs[o] = math.tanh(sum)
             end
         end
-        current = next
+        current = outputs
     end
     return current
 end
