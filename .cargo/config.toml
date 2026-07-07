@@ -1,0 +1,11 @@
+# Build configuration.
+#
+# PKG_CONFIG_PATH points at the vendored ALSA dev-headers shim in .alsa-shim/
+# (created locally, gitignored) so `cargo build` works without libasound2-dev
+# installed system-wide. On machines without the shim the extra path is simply
+# ignored and the system ALSA dev package is used instead:
+#   sudo apt install libasound2-dev   # Debian/Ubuntu
+# `force = false` keeps any PKG_CONFIG_PATH you set yourself in charge.
+
+[env]
+PKG_CONFIG_PATH = { value = ".alsa-shim/usr/lib/x86_64-linux-gnu/pkgconfig", force = false, relative = true }

@@ -1,9 +1,16 @@
-# ── Love2D build outputs ──────────────────────────────────────────────────────
+# ── Rust / Bevy ───────────────────────────────────────────────────────────────
+/target/
+.alsa-shim/
+
+# ── Love2D build outputs (legacy) ─────────────────────────────────────────────
 *.love
 *.AppImage
 
 # ── Generated at runtime ──────────────────────────────────────────────────────
 npc_brains.lua
+npc_brains.json
+custom_tracks.lua
+custom_tracks.json
 
 # ── Build / dist directories ──────────────────────────────────────────────────
 build/

@@ -1,0 +1,19 @@
+[workspace]
+members = ["crates/sim"]
+
+[package]
+name = "racing-game"
+version = "0.1.0"
+edition = "2021"
+description = "2D racing game with neuroevolution AI opponents (Bevy port of the Love2D original)"
+
+[dependencies]
+racing-sim = { path = "crates/sim" }
+bevy = { version = "0.16", features = ["wav"] }
+
+# Fast iterative builds: optimize deps, keep own code light
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
